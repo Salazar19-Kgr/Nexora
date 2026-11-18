@@ -70,7 +70,8 @@
     if (!/^\S+@\S+\.\S+$/.test(email)) { say('Escribe un correo válido.'); return busy(false); }
     if (pw.length < 8) { say('La contraseña debe tener al menos 8 caracteres.'); return busy(false); }
     if (pw !== pw2) { say('Las contraseñas no coinciden.'); return busy(false); }
-    return fetch('/api/username?u=' + encodeURIComponent(user)).then(function (r) { return r.json(); }).then(function (a) {
+    return fetch('/api/username?u=' + encodeURIComponent(user)).then(function (r) { return r.ok ? r.json() : null; }).then(function (a) {
+      if (!a) { say('El servicio de cuentas no está disponible ahora. Intenta más tarde.'); return busy(false); }
       if (!a.available) { say('Ese nombre de usuario ya está en uso.'); return busy(false); }
       return sb.auth.signUp({ email: email, password: pw, options: { data: { username: user }, emailRedirectTo: location.origin + '/' } }).then(function (r) {
         if (r.error) { say(r.error.message && /registered|exists/i.test(r.error.message) ? 'Ese correo ya tiene una cuenta.' : 'No se pudo crear la cuenta.'); return busy(false); }

@@ -1,7 +1,9 @@
 (function () {
   var $ = function (s) { return document.querySelector(s); };
   var tiles = $('#tiles'), dots = $('#dots'), dlg = $('#checkout'), msg = $('#msg'), buy = $('#buy');
-  var games = [];
+  var games = [], token = null;
+
+  window.NX.ready.then(function (o) { token = o.session ? o.session.access_token : null; });
 
   function hue(slug) { var h = 0; for (var i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) % 360; return h; }
   function initials(name) {
@@ -16,6 +18,7 @@
       });
     });
   }
+  function note(html) { msg.replaceChildren(); msg.append(html); }
 
   function render(list) {
     tiles.replaceChildren();
@@ -49,26 +52,36 @@
     $('#gname').textContent = g.name;
     $('#server_row').hidden = !(g.required_fields || []).includes('server');
     $('#player_id').value = '';
-    msg.textContent = 'Cargando paquetes...'; buy.disabled = true;
     var sel = $('#product'); sel.replaceChildren();
-    dlg.showModal();
-    api('/api/games/' + g.slug + '/products').then(function (prods) {
-      if (!prods.length) { msg.textContent = 'Este juego aún no tiene paquetes disponibles.'; return; }
-      prods.forEach(function (p) {
-        var o = document.createElement('option'); o.value = p.id;
-        o.textContent = p.name + ' · $' + Number(p.price_usd).toFixed(2); sel.append(o);
-      });
-      msg.textContent = ''; buy.disabled = false;
-    }).catch(function (e) { msg.textContent = e.message; });
+    buy.disabled = true;
+    window.NX.ready.then(function (o) {
+      token = o.session ? o.session.access_token : null;
+      if (!token) {
+        var a = document.createElement('a'); a.href = '/login'; a.textContent = 'Inicia sesión'; a.style.color = 'var(--hi)'; a.style.textDecoration = 'underline';
+        msg.replaceChildren(a, document.createTextNode(' para hacer tu recarga.'));
+        dlg.showModal(); return;
+      }
+      msg.textContent = 'Cargando paquetes...';
+      dlg.showModal();
+      api('/api/games/' + g.slug + '/products').then(function (prods) {
+        if (!prods.length) { msg.textContent = 'Este juego aún no tiene paquetes disponibles.'; return; }
+        prods.forEach(function (p) {
+          var op = document.createElement('option'); op.value = p.id;
+          op.textContent = p.name + ' · $' + Number(p.price_usd).toFixed(2); sel.append(op);
+        });
+        msg.textContent = ''; buy.disabled = false;
+      }).catch(function (e) { msg.textContent = e.message; });
+    });
   }
 
   $('#form').addEventListener('submit', function (e) {
     e.preventDefault(); buy.disabled = true; msg.textContent = 'Creando pedido...';
     api('/api/orders', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
       body: JSON.stringify({ product_id: $('#product').value, player: { player_id: $('#player_id').value.trim(), server: $('#server').value.trim() } })
     }).then(function (o) {
-      msg.textContent = 'Pedido ' + o.order_id.slice(0, 8) + ' creado. Estado: pendiente de pago.';
+      var a = document.createElement('a'); a.href = '/cuenta#pedidos'; a.textContent = 'Ver mis pedidos'; a.style.color = 'var(--hi)'; a.style.textDecoration = 'underline';
+      msg.replaceChildren(document.createTextNode('Pedido ' + o.order_id.slice(0, 8) + ' creado, pendiente de pago. '), a);
     }).catch(function (err) { msg.textContent = err.message; buy.disabled = false; });
   });
 
