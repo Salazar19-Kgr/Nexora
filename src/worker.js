@@ -12,7 +12,7 @@ async function sb(env, path, { method = "GET", body, service = false, headers = 
   if (!key) throw new Error("Falta clave de Supabase");
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
     method,
-    headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json", ...headers },
+    headers: { apikey: key, ...(key.startsWith("ey") ? { authorization: `Bearer ${key}` } : {}), "content-type": "application/json", ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw new Error(`Supabase ${res.status}`);
