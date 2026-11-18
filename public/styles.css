@@ -34,3 +34,4 @@ details[open] summary::after{content:"–"}
 .small{text-align:center;font-size:.75rem}
 .wa-float{position:fixed;right:16px;bottom:16px;width:56px;height:56px;border-radius:50%;background:var(--acc);color:#04130A;display:grid;place-items:center;box-shadow:0 4px 16px rgba(0,0,0,.5)}
 .wa-float svg{width:28px;height:28px}
+.hero-art{display:block;width:100%;max-width:720px;height:auto;margin:0 auto}
