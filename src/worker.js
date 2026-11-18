@@ -1,5 +1,6 @@
-// NEXORA - Worker de Cloudflare: sirve public/ y la API en /api/*
-// Claves SOLO como secretos de Cloudflare, nunca en el repo.
+// NEXORA · Worker de Cloudflare
+// Sirve public/ y la API en /api/*. Los secretos viven SOLO en Cloudflare:
+//   SUPABASE_ANON_KEY  (publishable)   SUPABASE_SERVICE_ROLE_KEY (secret)
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -7,12 +8,18 @@ const json = (data, status = 200) =>
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
 
+function authHeaders(key) {
+  const h = { apikey: key, "content-type": "application/json" };
+  if (key.startsWith("ey")) h.authorization = `Bearer ${key}`; // llaves JWT antiguas
+  return h;
+}
+
 async function sb(env, path, { method = "GET", body, service = false, headers = {} } = {}) {
   const key = service ? env.SUPABASE_SERVICE_ROLE_KEY : env.SUPABASE_ANON_KEY;
   if (!key) throw new Error("Falta clave de Supabase");
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
     method,
-    headers: { apikey: key, ...(key.startsWith("ey") ? { authorization: `Bearer ${key}` } : {}), "content-type": "application/json", ...headers },
+    headers: { ...authHeaders(key), ...headers },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw new Error(`Supabase ${res.status}`);
@@ -45,7 +52,7 @@ async function createOrder(env, request) {
     headers: { prefer: "return=representation" },
     body: {
       product_id: prods[0].id,
-      amount_usd: prods[0].price_usd,
+      amount_usd: prods[0].price_usd, // el precio lo fija el servidor, nunca el navegador
       rate_id: rate ? rate.id : null,
       rate_applied: rate ? rate.rate : null,
       player_details: { player_id: playerId, server: String(input.player.server || "").slice(0, 64) },
@@ -55,15 +62,54 @@ async function createOrder(env, request) {
   return json({ order_id: rows[0].id, status: rows[0].status, amount_usd: rows[0].amount_usd });
 }
 
+// Inicio de sesión con correo O nombre de usuario. El correo nunca se expone al navegador.
+async function login(env, request) {
+  const input = await request.json().catch(() => null);
+  const ident = String((input && input.identifier) || "").trim().slice(0, 120);
+  const password = String((input && input.password) || "").slice(0, 200);
+  if (!ident || !password) return json({ error: "Completa usuario y contraseña." }, 400);
+  const bad = () => json({ error: "Usuario o contraseña incorrectos." }, 401);
+
+  let email = ident;
+  if (!ident.includes("@")) {
+    if (!/^[A-Za-z0-9_]{3,20}$/.test(ident)) return bad();
+    const rows = await sb(env, `profiles?username=eq.${encodeURIComponent(ident)}&select=id`, { service: true });
+    if (!rows.length) return bad();
+    const u = await fetch(`${env.SUPABASE_URL}/auth/v1/admin/users/${rows[0].id}`, { headers: authHeaders(env.SUPABASE_SERVICE_ROLE_KEY) });
+    if (!u.ok) return bad();
+    email = (await u.json()).email;
+  }
+  const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: authHeaders(env.SUPABASE_ANON_KEY),
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) return bad();
+  const s = await res.json();
+  return json({ access_token: s.access_token, refresh_token: s.refresh_token });
+}
+
+async function usernameAvailable(env, url) {
+  const u = (url.searchParams.get("u") || "").trim();
+  if (!/^[A-Za-z0-9_]{3,20}$/.test(u)) return json({ available: false });
+  const rows = await sb(env, `profiles?username=eq.${encodeURIComponent(u)}&select=id`, { service: true });
+  return json({ available: rows.length === 0 });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
     try {
-      if (url.pathname === "/api/games" && request.method === "GET") return json(await listGames(env));
-      const m = url.pathname.match(/^\/api\/games\/([a-z0-9-]+)\/products$/);
-      if (m && request.method === "GET") return json(await listProducts(env, m[1]));
-      if (url.pathname === "/api/orders" && request.method === "POST") return await createOrder(env, request);
+      const m = request.method, p = url.pathname;
+      if (p === "/api/config" && m === "GET")
+        return json({ url: env.SUPABASE_URL, anonKey: env.SUPABASE_ANON_KEY }); // la clave anon es pública por diseño
+      if (p === "/api/games" && m === "GET") return json(await listGames(env));
+      const g = p.match(/^\/api\/games\/([a-z0-9-]+)\/products$/);
+      if (g && m === "GET") return json(await listProducts(env, g[1]));
+      if (p === "/api/orders" && m === "POST") return await createOrder(env, request);
+      if (p === "/api/login" && m === "POST") return await login(env, request);
+      if (p === "/api/username" && m === "GET") return await usernameAvailable(env, url);
       return json({ error: "No encontrado" }, 404);
     } catch (e) {
       return json({ error: "Servicio no disponible" }, 503);

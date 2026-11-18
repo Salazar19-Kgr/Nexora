@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050907">
+<title>Crear cuenta · NEXORA</title>
+<link rel="icon" href="/img/nexora-emblem.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/nexora.css">
+</head>
+<body data-mode="signup">
+<main class="wrap auth-main">
+  <section class="auth-card">
+    <img class="auth-art" src="/img/auth-signup.svg" alt="">
+    <div class="auth-body">
+      <p class="hello">Crear tu cuenta en</p>
+      <div class="brand-big"><svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-logo"/></svg><span class="wm">NEXORA</span></div>
+      <p class="lead">Únete a la comunidad y disfruta de todos los beneficios.</p>
+      <form id="f" novalidate>
+        <div class="field"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-user"/></svg><input id="user" type="text" placeholder="Nombre de usuario" autocomplete="username" autocapitalize="none" maxlength="20" required aria-label="Nombre de usuario"></div>
+        <div class="field"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-mail"/></svg><input id="email" type="email" placeholder="Correo electrónico" autocomplete="email" required aria-label="Correo electrónico"></div>
+        <div class="field"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-lock"/></svg><input id="pw" type="password" placeholder="Contraseña" autocomplete="new-password" minlength="8" required aria-label="Contraseña"><button class="eye" type="button" data-eye="pw" aria-label="Mostrar contraseña"><svg class="ic" viewBox="0 0 24 24"><use href="#i-eye"/></svg></button></div>
+        <div class="field"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-lock"/></svg><input id="pw2" type="password" placeholder="Confirmar contraseña" autocomplete="new-password" required aria-label="Confirmar contraseña"><button class="eye" type="button" data-eye="pw2" aria-label="Mostrar contraseña"><svg class="ic" viewBox="0 0 24 24"><use href="#i-eye"/></svg></button></div>
+        <p id="msg" class="msg" role="status"></p>
+        <button id="go" class="btn block" type="submit">Crear cuenta <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+      </form>
+      <div class="or" style="margin-top:18px">o regístrate con</div>
+      <div class="socials" id="socials"></div>
+      <p class="alt">Al registrarte aceptas nuestros términos y condiciones.</p>
+      <p class="alt">¿Ya tienes cuenta? <a href="/login">Inicia sesión</a></p>
+    </div>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="/js/chrome.js"></script>
+<script src="/js/auth.js"></script>
+</body>
+</html>
