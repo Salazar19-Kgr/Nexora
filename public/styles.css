@@ -18,19 +18,3 @@ dialog::backdrop{background:rgba(0,0,0,.7)}
 label{display:block;margin:12px 0;color:var(--tx2);font-size:.9rem}label input,label select{margin-top:6px}
 .row{display:flex;gap:10px;justify-content:flex-end}
 .muted{color:var(--tx2);font-size:.9rem}footer{padding:32px 16px}
-footer.foot{max-width:none;margin:40px 0 0;padding:28px 16px;background:var(--s1);border-top:1px solid var(--acc2)}
-footer.foot>*{max-width:720px;margin-left:auto;margin-right:auto}
-.brandrow{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.15em}
-details{border-top:1px solid var(--s2);padding:14px 0}
-summary{cursor:pointer;font-weight:700;letter-spacing:.1em;text-transform:uppercase;list-style:none;display:flex;justify-content:space-between}
-summary::after{content:"+";color:var(--tx2)}
-details[open] summary::after{content:"–"}
-.foot a{color:var(--tx)}
-.sig{font-size:.9rem;letter-spacing:.1em;text-transform:uppercase;margin:20px auto 0;border-bottom:2px solid var(--acc);width:fit-content}
-.social{display:flex;gap:12px;margin:12px auto 20px}
-.social a{width:48px;height:48px;display:grid;place-items:center;background:var(--s2);border-radius:12px;color:var(--acc)}
-.social svg{width:24px;height:24px}
-.copy{text-align:center;color:var(--tx2);font-size:.85rem;border-top:1px solid var(--s2);padding-top:16px}
-.small{text-align:center;font-size:.75rem}
-.wa-float{position:fixed;right:16px;bottom:16px;width:56px;height:56px;border-radius:50%;background:var(--acc);color:#04130A;display:grid;place-items:center;box-shadow:0 4px 16px rgba(0,0,0,.5)}
-.wa-float svg{width:28px;height:28px}
