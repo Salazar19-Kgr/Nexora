@@ -14,6 +14,7 @@
     <div class="who"><div class="av" id="av" aria-hidden="true"></div><div><strong id="uname">…</strong><small id="umail"></small></div></div>
     <nav aria-label="Mi cuenta">
       <a href="/cuenta" class="on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg>Inicio</a>
+      <a href="#recompensas"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-star"/></svg>Recompensas</a>
       <a href="#pedidos"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg>Mis pedidos</a>
       <a href="/ajustes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"/></svg>Configuración</a>
       <a href="/ajustes#soporte"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-headset"/></svg>Soporte</a>
@@ -22,12 +23,33 @@
   </aside>
   <section class="panel">
     <div class="ph"><div><h1>Mi cuenta</h1><p>Tu espacio en NEXORA</p></div><span class="badge">Bienvenido de vuelta</span></div>
-    <div class="stats">
-      <div class="stat"><b>Bs. 0,00</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wallet"/></svg>Saldo</span></div>
+    <div class="stats four">
+      <div class="stat"><b id="bal">$0.00</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wallet"/></svg>Saldo</span></div>
       <div class="stat"><b id="ocount">0</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg>Pedidos</span></div>
-      <div class="stat"><b>0</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-star"/></svg>Puntos</span></div>
+      <div class="stat"><b id="pts">0</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-star"/></svg>Puntos</span></div>
+      <div class="stat"><b id="spn">0</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bolt"/></svg>Giros</span></div>
     </div>
-    <div class="level"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-crown"/></svg><div><strong>Sube de nivel</strong><p>Compra, acumula puntos y desbloquea recompensas.</p></div></div>
+
+    <h2 id="recompensas">Recompensas</h2>
+    <div class="rw">
+      <div class="card">
+        <h2>Canjear código</h2>
+        <p>¿Tienes un código de regalo? Escríbelo aquí.</p>
+        <form id="redeem" class="redeem" novalidate>
+          <input id="rcode" maxlength="32" placeholder="NX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" aria-label="Código de canje">
+          <button class="btn" type="submit" id="rbtn">Canjear</button>
+        </form>
+        <p id="rmsg" class="msg" role="status"></p>
+      </div>
+      <div class="card">
+        <h2>Ruleta de premios</h2>
+        <p id="wsub">Gira y gana saldo, puntos o más giros.</p>
+        <div class="wheelbox" id="wbox"></div>
+        <p class="prize-msg" id="pmsg2" role="status"></p>
+        <button class="btn block" type="button" id="spinbtn" disabled>Girar</button>
+      </div>
+    </div>
+
     <h2 id="pedidos">Tus últimos pedidos</h2>
     <div class="orders" id="orders" aria-live="polite"><p class="muted">Cargando…</p></div>
   </section>
@@ -35,5 +57,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="/js/chrome.js"></script>
 <script src="/js/account.js"></script>
+<script src="/js/rewards.js"></script>
 </body>
 </html>

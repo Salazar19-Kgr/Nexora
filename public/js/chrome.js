@@ -100,6 +100,11 @@
     out.addEventListener('click', function () { o.sb.auth.signOut().then(function () { location.href = '/'; }); });
     menu.appendChild(out);
     btn.parentNode.appendChild(menu);
+    fetch('/api/admin/me', { headers: { authorization: 'Bearer ' + o.session.access_token } }).then(function (r) {
+      if (!r.ok) return;
+      var ad = document.createElement('a'); ad.href = '/admin'; ad.className = 'adminlink'; ad.textContent = 'Panel admin';
+      menu.insertBefore(ad, out);
+    }).catch(function () {});
     function toggle(e) { if (e) e.preventDefault(); menu.hidden = !menu.hidden; }
     btn.addEventListener('click', toggle);
     btn.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle(e); if (e.key === 'Escape') menu.hidden = true; });

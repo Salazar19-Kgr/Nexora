@@ -51,7 +51,7 @@
   function openGame(g) {
     $('#gname').textContent = g.name;
     $('#server_row').hidden = !(g.required_fields || []).includes('server');
-    $('#player_id').value = '';
+    $('#player_id').value = ''; $('#coupon').value = '';
     var sel = $('#product'); sel.replaceChildren();
     buy.disabled = true;
     window.NX.ready.then(function (o) {
@@ -78,10 +78,11 @@
     e.preventDefault(); buy.disabled = true; msg.textContent = 'Creando pedido...';
     api('/api/orders', {
       method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
-      body: JSON.stringify({ product_id: $('#product').value, player: { player_id: $('#player_id').value.trim(), server: $('#server').value.trim() } })
+      body: JSON.stringify({ product_id: $('#product').value, coupon: $('#coupon').value.trim(), player: { player_id: $('#player_id').value.trim(), server: $('#server').value.trim() } })
     }).then(function (o) {
       var a = document.createElement('a'); a.href = '/cuenta#pedidos'; a.textContent = 'Ver mis pedidos'; a.style.color = 'var(--hi)'; a.style.textDecoration = 'underline';
-      msg.replaceChildren(document.createTextNode('Pedido ' + o.order_id.slice(0, 8) + ' creado, pendiente de pago. '), a);
+      var d = Number(o.discount_usd) > 0 ? ' Cupón aplicado: −$' + Number(o.discount_usd).toFixed(2) + '. Total: $' + Number(o.amount_usd).toFixed(2) + '.' : '';
+      msg.replaceChildren(document.createTextNode('Pedido ' + o.order_id.slice(0, 8) + ' creado, pendiente de pago.' + d + ' '), a);
     }).catch(function (err) { msg.textContent = err.message; buy.disabled = false; });
   });
 
