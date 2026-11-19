@@ -194,6 +194,7 @@
           { k: 'slug', label: 'Slug (dirección)', max: 40, disabled: !!row, hint: 'Minúsculas y guiones. Ej: free-fire. No se puede cambiar después.' },
           { k: 'category', label: 'Categoría', max: 60, datalist: ['Shooter / Battle Royale', 'MOBA / Estrategia', 'RPG / Gacha', 'Sandbox / Social'] },
           { k: 'description', label: 'Descripción (opcional)', max: 300 },
+          { k: 'icon_url', label: 'Logo del juego (enlace https, opcional)', max: 300, hint: 'Si lo dejas vacío se muestra un emblema dibujado por NEXORA. Usa solo logos que tengas derecho a usar.' },
           { k: 'required_fields', label: 'Datos que pide al comprar', type: 'select', opts: [['player_id', 'Solo ID de jugador'], ['player_id,server', 'ID de jugador + servidor']], def: 'player_id' },
           { k: 'status', label: 'Estado', type: 'select', opts: PUB_OPTS, def: 'draft' },
           { k: 'sort_order', label: 'Orden en la tienda', type: 'number', def: 100, hint: 'Número menor aparece primero.' }
@@ -229,6 +230,24 @@
           { k: 'status', label: 'Estado', type: 'select', opts: PUB_OPTS, def: 'draft', hint: 'Actívalo cuando tengas con qué entregarlo.' },
           { k: 'sku', label: 'SKU', max: 60, upper: true, disabled: !!row, hint: row ? '' : 'Déjalo vacío y se genera solo.' },
           { k: 'external_sku', label: 'SKU del proveedor (opcional)', max: 80 }
+        ];
+      }
+    },
+    paymethods: {
+      name: 'paymethods', title: 'Métodos de pago', desc: 'Lo que ve el cliente al pagar: datos de tu cuenta y moneda.', newTitle: 'Agregar método', editTitle: 'Editar método', empty: 'Aún no hay métodos. Agrega el primero con “+ Nuevo”.',
+      note: null,
+      item: function (r) {
+        return { title: r.name, sub: (ES.method[r.kind] || r.kind) + ' · cobra en ' + r.currency, chips: [Number(r.min_usd) > 0 ? 'Mínimo ' + usd(r.min_usd) : null, 'Orden ' + r.sort_order], badge: r.active ? ['Activo', 'ok'] : ['Oculto', 'wait'] };
+      },
+      fields: function () {
+        return [
+          { k: 'name', label: 'Nombre que ve el cliente', max: 60, hint: 'Ej: Pago móvil Banesco' },
+          { k: 'kind', label: 'Tipo', type: 'select', opts: Object.keys(ES.method).map(function (k) { return [k, ES.method[k]]; }), def: 'pago_movil' },
+          { k: 'currency', label: 'Moneda en que paga el cliente', type: 'select', opts: [['VES', 'Bolívares (Bs)'], ['USD', 'Dólares (USD)'], ['USDT', 'USDT']], def: 'VES', hint: 'En bolívares el monto se calcula con la tasa guardada en el pedido.' },
+          { k: 'instructions', label: 'Datos para pagar', max: 800, hint: 'Banco, teléfono, cédula, titular, correo, ID de Binance… lo que el cliente necesita.' },
+          { k: 'min_usd', label: 'Pedido mínimo (USD)', type: 'number', step: '0.01', def: 0 },
+          { k: 'sort_order', label: 'Orden', type: 'number', def: 100 },
+          { k: 'active', label: 'Activo', type: 'checkbox', def: true }
         ];
       }
     },
@@ -457,6 +476,50 @@
     });
   }
 
+  // ---------- Comprobantes de pago ----------
+  function viewProofs() {
+    view.replaceChildren(h('p', { class: 'muted', text: 'Cargando…' }));
+    return api('proofs?status=pending').then(function (rows) {
+      var list = h('div', { class: 'alist' });
+      if (!rows.length) list.append(h('div', { class: 'empty', text: 'No hay comprobantes por revisar. 🎉' }));
+      rows.forEach(function (p) {
+        var m = p.payment_methods || {}, o = p.orders || {};
+        var exp = p.expected != null ? (m.currency === 'VES' ? 'Bs ' : '') + Number(p.expected).toLocaleString('es-VE', { minimumFractionDigits: 2 }) + (m.currency === 'USD' ? ' USD' : m.currency === 'USDT' ? ' USDT' : '') : '—';
+        var game = (o.products && o.products.games && o.products.games.name) || 'Juego';
+        var pd = o.player_details || {};
+        var img = h('div', { class: 'proofimg' });
+        var see = h('button', { class: 'btn ghost sm', text: 'Ver captura', onclick: function () {
+          see.disabled = true;
+          api('proofs/' + p.id + '/image').then(function (r) {
+            var im = h('img', { alt: 'Captura del pago', src: r.url, class: 'prev' }); img.replaceChildren(im);
+          }).catch(function (e) { toast(e.message, true); see.disabled = false; });
+        } });
+        list.append(h('div', { class: 'arow col' },
+          h('div', { class: 'ainfo' },
+            h('b', { text: 'Ref ' + p.reference + ' · ' + (m.name || 'Método') }),
+            h('small', { text: (p.username || 'usuario') + ' · ' + game + ' · ' + ((o.products && o.products.name) || '') + ' · ID ' + (pd.player_id || '—') + ' · ' + when(p.created_at) }),
+            chips(['Debe pagar ' + exp, 'Pedido ' + usd(o.amount_usd)])),
+          p.has_image ? h('div', { class: 'olines' }, see, img) : h('small', { class: 'muted', text: 'Sin captura.' }),
+          h('div', { class: 'aact' },
+            h('button', { class: 'btn sm', text: 'Aprobar pago', onclick: function () {
+              form('Aprobar pago · ref ' + p.reference, [
+                { k: 'amount', label: 'Monto recibido (' + (m.currency || '') + ')', type: 'number', step: '0.01', hint: 'Revisa que coincida con tu banco. Esto libera el pedido.' }
+              ], { amount: p.expected != null ? String(p.expected) : '' }, function (d) {
+                return api('proofs/' + p.id + '/review', { body: { action: 'approve', amount: d.amount } }).then(function () { toast('Pago aprobado'); return viewProofs(); });
+              }, 'Aprobar');
+            } }),
+            h('button', { class: 'btn ghost sm', text: 'Rechazar', onclick: function () {
+              form('Rechazar comprobante', [
+                { k: 'reason', label: 'Motivo (lo ve el cliente)', max: 200, hint: 'Ej: la referencia no coincide.' }
+              ], null, function (d) {
+                return api('proofs/' + p.id + '/review', { body: { action: 'reject', reason: d.reason } }).then(function () { toast('Rechazado'); return viewProofs(); });
+              }, 'Rechazar');
+            } }))));
+      });
+      show('Comprobantes', 'Pagos esperando revisión. Si conectas el bot de pagos, los que coincidan se aprueban solos.', null, list);
+    }).catch(fail);
+  }
+
   // ---------- Auditoría ----------
   function viewAudit() {
     view.replaceChildren(h('p', { class: 'muted', text: 'Cargando…' }));
@@ -480,6 +543,8 @@
     { id: 'usuarios', label: 'Usuarios', icon: 'user', perm: 'users.read', go: viewUsers },
     { id: 'juegos', label: 'Juegos', icon: 'gamepad', perm: 'catalog.read', go: function () { CFG.games.canWrite = has('catalog.write'); return manager(CFG.games); } },
     { id: 'precios', label: 'Precios', icon: 'wallet', perm: 'catalog.read', go: function () { CFG.products.canWrite = has('catalog.write'); return manager(CFG.products); } },
+    { id: 'comprobantes', label: 'Comprobantes', icon: 'shield', perm: 'payments.write', go: viewProofs },
+    { id: 'pagos', label: 'Métodos de pago', icon: 'wallet', perm: 'payments.write', go: function () { CFG.paymethods.canWrite = true; return manager(CFG.paymethods); } },
     { id: 'cupones', label: 'Cupones', icon: 'crown', perm: 'coupons.write', go: function () { CFG.coupons.canWrite = true; return manager(CFG.coupons); } },
     { id: 'canjes', label: 'Canjes', icon: 'star', perm: 'codes.write', go: function () { CFG.codes.canWrite = true; return manager(CFG.codes); } },
     { id: 'ruleta', label: 'Ruleta', icon: 'bolt', perm: 'wheel.write', go: function () { CFG.prizes.canWrite = true; return manager(CFG.prizes); } },

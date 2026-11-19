@@ -20,12 +20,12 @@
   <section class="promo" aria-labelledby="pt">
     <h2 id="pt">Recargas Instantáneas</h2>
     <p>Juega sin límites, recarga al instante</p>
-    <a class="btn" href="#juegos">Explorar Tienda <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    <a class="btn" href="/juegos">Explorar Tienda <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></a>
     <img class="art" src="/img/nexora-character.svg" alt="">
   </section>
 
   <section id="juegos" aria-live="polite">
-    <div class="sec-h"><h2>Juegos Populares</h2></div>
+    <div class="sec-h"><h2>Juegos Populares</h2><a class="more" href="/juegos">Ver todos <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
     <div class="tiles" id="tiles">
       <div class="tile skel"><div class="art"></div></div><div class="tile skel"><div class="art"></div></div><div class="tile skel"><div class="art"></div></div>
     </div>
@@ -41,20 +41,9 @@
   </section>
 </main>
 
-<dialog id="checkout">
-  <form id="form" method="dialog">
-    <h2 id="gname"></h2>
-    <label>Paquete <select id="product" required></select></label>
-    <label>ID de jugador <input id="player_id" required maxlength="64" autocomplete="off"></label>
-    <label id="server_row" hidden>Servidor (opcional) <input id="server" maxlength="64" autocomplete="off"></label>
-    <label>Cupón de descuento (opcional) <input id="coupon" maxlength="32" autocomplete="off" autocapitalize="characters" placeholder="Ej: NX-ABCD-1234"></label>
-    <p id="msg" class="muted" role="status"></p>
-    <div class="row"><button value="cancel" class="btn ghost" formnovalidate>Cerrar</button><button id="buy" class="btn" type="submit">Realizar recarga</button></div>
-  </form>
-</dialog>
-
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="/js/chrome.js"></script>
+<script src="/js/art.js"></script>
 <script src="/js/home.js"></script>
 </body>
 </html>

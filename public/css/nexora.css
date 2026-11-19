@@ -239,3 +239,78 @@ dialog .btn.sm{margin-top:8px}
 .menu a.adminlink{color:var(--hi)}
 .stats.four{grid-template-columns:repeat(2,1fr)}
 @media(min-width:560px){.stats.four{grid-template-columns:repeat(4,1fr)}}
+
+/* ---------- Logos de juegos (emblemas en SVG) ---------- */
+.gl{border-radius:16px;display:grid;place-items:center;position:relative;overflow:hidden;border:1.5px solid hsl(var(--h) 65% 46%);background:radial-gradient(circle at 30% 18%,hsl(var(--h) 70% 40%),hsl(var(--h) 62% 9%) 85%);box-shadow:0 0 18px hsl(var(--h) 85% 45%/.28),inset 0 0 14px rgba(255,255,255,.06)}
+.gl::after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.22),transparent 42%);pointer-events:none}
+.gl .mo{width:60%;height:60%;position:relative;z-index:1;filter:drop-shadow(0 3px 5px rgba(0,0,0,.55))}
+.gl img{width:100%;height:100%;object-fit:cover;display:block}
+.gl.big{width:76px;height:76px;flex:none;border-radius:20px}
+.gl.mid{width:56px;height:56px;flex:none;border-radius:15px}
+.gl.sm{width:46px;height:46px;flex:none;border-radius:12px}
+.dot{padding:0;overflow:hidden;background:none}
+.dot .gl{width:100%;height:100%;border:0;border-radius:50%;box-shadow:none}
+.dot:not(.plus){border:2px solid hsl(var(--h,140) 70% 45%)}
+a.tile{display:block}
+.tile .gl{width:100%;aspect-ratio:1;border-radius:18px}
+.tile .gl .mo{width:58%;height:58%}
+a.order{color:inherit}
+a.order:hover{border-color:var(--acc)}
+.circ img{width:100%;height:100%;border-radius:50%;object-fit:cover;object-position:50% 20%}
+.circ.has-av{overflow:hidden;background:radial-gradient(circle at 50% 30%,#14502a,#06120b)}
+.av img{width:100%;height:100%;border-radius:50%;object-fit:cover;object-position:50% 18%}
+.av{overflow:hidden}
+
+/* ---------- Páginas: juegos, juego, pago ---------- */
+.page{padding-top:16px;padding-bottom:28px}
+.page.narrow{max-width:640px}
+.back{display:inline-flex;align-items:center;gap:6px;color:var(--tx2);font-weight:600;margin-bottom:12px}
+.back .ic{width:18px;height:18px}
+.back:hover{color:var(--hi)}
+.ghead{display:flex;gap:14px;align-items:center;margin-bottom:16px;padding:14px;border-radius:20px;border:1px solid var(--line);background:linear-gradient(120deg,#0f2417,#0a110d)}
+.ghead h1{font-size:1.4rem;line-height:1.15}
+.step{margin-bottom:18px}
+.step>h2{display:flex;align-items:center;gap:10px;font-size:1.1rem;margin-bottom:10px}
+.n{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:.85rem;font-weight:800;color:#04130A;background:linear-gradient(180deg,#6dff8a,#18d84b);flex:none}
+.plist{display:grid;gap:10px}
+.prow{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border-radius:16px;background:var(--card);border:1.5px solid var(--line2);cursor:pointer;text-align:left;color:var(--tx)}
+.prow:hover:not(:disabled){border-color:var(--acc)}
+.prow.on{border-color:var(--acc);background:rgba(22,217,74,.1);box-shadow:0 0 0 3px rgba(22,217,74,.14),0 0 22px rgba(22,217,74,.2)}
+.prow:disabled{opacity:.5;cursor:not-allowed}
+.prow .gem{width:40px;height:40px;flex:none;filter:drop-shadow(0 0 8px rgba(63,208,255,.55))}
+.pi{flex:1;min-width:0}
+.pi b{display:block;font-size:1rem;overflow-wrap:anywhere}
+.pi small{color:var(--tx2);font-size:.8rem}
+.pp{font-weight:800;color:var(--hi);white-space:nowrap}
+.mico{width:42px;height:42px;flex:none;border-radius:12px;display:grid;place-items:center;border:1.5px solid var(--acc);color:var(--hi);background:rgba(22,217,74,.07)}
+.mico .ic{width:22px;height:22px}
+.buybar{position:fixed;left:0;right:0;bottom:calc(66px + env(safe-area-inset-bottom));z-index:39;display:flex;gap:14px;align-items:center;justify-content:space-between;padding:10px 16px;background:rgba(8,13,10,.96);border-top:1px solid var(--acc);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.buybar[hidden]{display:none}
+.tot b{display:block;font-size:1.3rem;color:var(--hi);line-height:1.1}
+.tot small{display:block;color:var(--tx2);font-size:.78rem}
+@media(min-width:860px){.buybar{bottom:0}}
+.page.narrow:has(+ .buybar:not([hidden])){padding-bottom:110px}
+.sum{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.st-txt{flex:1;min-width:0}.st-txt b{display:block;overflow-wrap:anywhere}.st-txt small{color:var(--tx2)}
+.st-tot{text-align:right}.st-tot b{display:block;color:var(--hi);font-size:1.25rem}.st-tot small{color:var(--tx2);font-size:.78rem}
+.paybox .amt{display:flex;gap:10px;align-items:center;justify-content:space-between;margin:4px 0 8px}
+.paybox .amt b{font-size:1.7rem;color:var(--hi);overflow-wrap:anywhere}
+.instr{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;background:#060b08;border:1px solid var(--line2);border-radius:12px;padding:12px;margin:8px 0 12px;color:var(--tx)}
+.drop{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:72px;margin:10px 0;border-radius:14px;border:2px dashed var(--line);background:rgba(22,217,74,.04);color:var(--hi);font-weight:700;cursor:pointer}
+.drop:hover{border-color:var(--acc)}
+.prev{display:block;max-width:100%;max-height:320px;margin:0 auto 10px;border-radius:12px;border:1px solid var(--line2)}
+.card .btn.block{margin-top:8px}
+.stat-card{text-align:center}
+.stat-card .bigic{width:64px;height:64px;margin:0 auto 8px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--acc);color:var(--hi);box-shadow:0 0 22px rgba(22,217,74,.35)}
+.stat-card.wait .bigic{border-color:#d9b43a;color:#ffd24a;box-shadow:0 0 22px rgba(255,210,74,.25)}
+.stat-card.bad .bigic{border-color:#a04545;color:var(--err);box-shadow:none}
+.bigic .ic{width:30px;height:30px}
+.tl{list-style:none;display:flex;gap:6px;margin:16px 0 0;padding:0;text-align:center}
+.tl li{flex:1;font-size:.72rem;color:var(--tx2);padding-top:14px;position:relative}
+.tl li::before{content:"";position:absolute;left:0;right:0;top:4px;height:4px;border-radius:2px;background:var(--line2)}
+.tl li.done::before{background:var(--acc)}.tl li.done{color:var(--hi)}
+.tl li.cur::before{background:linear-gradient(90deg,var(--acc),var(--line2));animation:pulse 1.4s ease-in-out infinite}.tl li.cur{color:var(--tx)}
+@keyframes pulse{50%{opacity:.4}}
+@media(prefers-reduced-motion:reduce){.tl li.cur::before{animation:none}}
+.ph .btn.sm{align-self:flex-start}
+[hidden]{display:none!important}

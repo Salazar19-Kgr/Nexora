@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050907">
+<title>Pago · NEXORA</title>
+<link rel="icon" href="/img/nexora-emblem.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/nexora.css">
+</head>
+<body>
+<main class="wrap page narrow">
+  <a class="back" href="/pedidos"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-back"/></svg>Mis pedidos</a>
+  <div class="card sum" id="sum"><p class="muted">Cargando pedido…</p></div>
+  <p id="msg" class="msg" role="status"></p>
+
+  <section class="step" id="s-status" hidden></section>
+
+  <section class="step" id="s-methods" hidden>
+    <h2><span class="n">1</span>Elige cómo pagar</h2>
+    <div class="plist" id="mlist" role="radiogroup" aria-label="Métodos de pago"></div>
+  </section>
+
+  <section class="step" id="s-pay" hidden>
+    <h2><span class="n">2</span>Realiza el pago</h2>
+    <div class="card paybox">
+      <p class="muted">Monto exacto a pagar</p>
+      <div class="amt"><b id="amt"></b><button type="button" class="btn ghost sm" id="cp-amt">Copiar</button></div>
+      <p class="muted" id="mname"></p>
+      <pre class="instr" id="instr"></pre>
+      <button type="button" class="btn ghost sm" id="cp-ins">Copiar datos</button>
+    </div>
+  </section>
+
+  <section class="step" id="s-proof" hidden>
+    <h2><span class="n">3</span>Sube tu comprobante</h2>
+    <form class="card" id="pf" novalidate>
+      <label>Número de referencia
+        <input id="ref" maxlength="64" autocomplete="off" autocapitalize="characters" placeholder="Ej: 004582193">
+      </label>
+      <input id="file" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+      <button type="button" class="drop" id="pick"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-upload"/></svg><span id="picklbl">Subir captura del pago</span></button>
+      <img id="prev" class="prev" alt="Vista previa de tu captura" hidden>
+      <p class="muted">Asegúrate de que se vea la referencia, el monto y la fecha.</p>
+      <button class="btn block" type="submit" id="send">Enviar comprobante</button>
+    </form>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="/js/chrome.js"></script>
+<script src="/js/art.js"></script>
+<script src="/js/pago.js"></script>
+</body>
+</html>

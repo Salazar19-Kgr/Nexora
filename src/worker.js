@@ -66,6 +66,13 @@ const PG_MSG = {
   ruleta_vacia: [409, "La ruleta aún no tiene premios."],
   pedido_no_pagable: [409, "El pedido ya no está pendiente de pago."],
   usuario_no_existe: [404, "Usuario no encontrado."],
+  pedido_no_existe: [404, "Pedido no encontrado."],
+  metodo_invalido: [400, "Ese método de pago no está disponible."],
+  monto_minimo: [400, "El pedido es menor al mínimo de ese método de pago."],
+  comprobante_pendiente: [409, "Ya enviaste un comprobante para este pedido. Está en revisión."],
+  referencia_usada: [409, "Esa referencia ya fue usada en otro pago."],
+  comprobante_no_pendiente: [409, "Ese comprobante ya fue revisado."],
+  accion_invalida: [400, "Acción no válida."],
 };
 
 // ---------- Sesión ----------
@@ -93,12 +100,27 @@ async function readBody(request) {
 
 // ---------- Tienda pública ----------
 const listGames = (env) =>
-  sb(env, "games?status=eq.active&select=id,slug,name,category,required_fields&order=sort_order.asc");
+  sb(env, "games?status=eq.active&select=id,slug,name,category,description,icon_url,required_fields&order=sort_order.asc");
 
 async function listProducts(env, slug) {
   const g = await sb(env, `games?slug=eq.${encodeURIComponent(slug)}&status=eq.active&select=id`);
   if (!g.length) return [];
   return sb(env, `products?game_id=eq.${g[0].id}&status=eq.active&select=id,name,price_usd&order=price_usd.asc`);
+}
+
+async function latestRate(env) {
+  const r = await sb(env, "exchange_rates?quote=eq.VES&order=fetched_at.desc&limit=1&select=rate", { service: true });
+  return r[0] ? Number(r[0].rate) : null;
+}
+
+async function gamePage(env, slug) {
+  const g = await sb(env, `games?slug=eq.${encodeURIComponent(slug)}&status=eq.active&select=id,slug,name,category,description,icon_url,required_fields`);
+  if (!g.length) throw bad("Juego no encontrado.", 404);
+  const [products, rate] = await Promise.all([
+    sb(env, `products?game_id=eq.${g[0].id}&status=eq.active&select=id,name,price_usd&order=price_usd.asc`),
+    latestRate(env),
+  ]);
+  return json({ game: g[0], products, rate });
 }
 
 async function createOrder(env, request) {
@@ -115,6 +137,98 @@ async function createOrder(env, request) {
     p_player: { player_id: playerId, server: String(input.player.server || "").trim().slice(0, 64) },
     p_coupon: coupon,
   });
+  return json(r);
+}
+
+// ---------- Pago: métodos, pedido y comprobante ----------
+const KINDS = ["pago_movil", "transferencia", "zelle", "binance", "usdt", "efectivo", "otro"];
+const money = (n) => Math.round(Number(n) * 100) / 100;
+const expectedIn = (order, currency) =>
+  currency === "VES" ? money(Number(order.amount_usd) * Number(order.rate_applied || 0)) : money(order.amount_usd);
+
+async function paymentMethods(env, request) {
+  await needUser(env, request);
+  return json(await sb(env, "payment_methods?active=eq.true&select=id,name,kind,currency,instructions,min_usd&order=sort_order.asc,name.asc", { service: true }));
+}
+
+async function myOrder(env, request, id) {
+  const user = await needUser(env, request);
+  id = uuidOrFail(id);
+  const rows = await sb(env,
+    `orders?id=eq.${id}&user_id=eq.${user.id}&select=${encodeURIComponent("id,status,amount_usd,discount_usd,rate_applied,player_details,created_at,products(name,games(name,slug,icon_url,category))")}`,
+    { service: true });
+  if (!rows.length) throw bad("Pedido no encontrado.", 404);
+  const proofs = await sb(env, `payment_proofs?order_id=eq.${id}&select=status,reject_reason,created_at,payment_methods(name)&order=created_at.desc&limit=1`, { service: true });
+  return json({ ...rows[0], proof: proofs[0] || null });
+}
+
+function imageType(b) {
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return ["image/jpeg", "jpg"];
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return ["image/png", "png"];
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return ["image/webp", "webp"];
+  return null;
+}
+
+async function storageUpload(env, path, bytes, type) {
+  const r = await fetch(`${env.SUPABASE_URL}/storage/v1/object/proofs/${path}`, {
+    method: "POST",
+    headers: { ...authHeaders(env.SUPABASE_SERVICE_ROLE_KEY), "content-type": type, "x-upsert": "false" },
+    body: bytes,
+  });
+  if (!r.ok) throw new Error("storage_upload");
+}
+async function storageRemove(env, path) {
+  try {
+    await fetch(`${env.SUPABASE_URL}/storage/v1/object/proofs/${path}`, { method: "DELETE", headers: authHeaders(env.SUPABASE_SERVICE_ROLE_KEY) });
+  } catch (e) { /* mejor esfuerzo */ }
+}
+
+async function submitProof(env, request, id) {
+  const user = await needUser(env, request);
+  id = uuidOrFail(id);
+  if (Number(request.headers.get("content-length") || 0) > 6 * 1024 * 1024) throw bad("La captura es demasiado pesada (máximo 5 MB).", 413);
+  const form = await request.formData().catch(() => null);
+  if (!form) throw bad("Datos inválidos.");
+  const methodId = uuidOrFail(form.get("method_id"));
+  const reference = coerce({ t: "text", label: "Referencia", req: true, upper: true, max: 64, re: /^[A-Z0-9._-]{4,64}$/ }, String(form.get("reference") || "").replace(/\s+/g, ""));
+  const file = form.get("proof");
+  if (!file || typeof file === "string" || !file.size) throw bad("Adjunta la captura del pago.");
+  if (file.size > 5 * 1024 * 1024) throw bad("La captura es demasiado pesada (máximo 5 MB).", 413);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const kind = imageType(bytes);
+  if (!kind) throw bad("La captura debe ser una imagen JPG, PNG o WEBP.");
+  const path = `${user.id}/${id}-${rnd(8).toLowerCase()}.${kind[1]}`;
+  await storageUpload(env, path, bytes, kind[0]);
+  try {
+    const r = await rpc(env, "submit_proof", { p_user: user.id, p_order: id, p_method: methodId, p_ref: reference, p_path: path });
+    return json(r, 201);
+  } catch (e) {
+    await storageRemove(env, path);
+    throw e;
+  }
+}
+
+function sameSecret(a, b) {
+  if (!a || !b) return Promise.resolve(false);
+  const enc = new TextEncoder();
+  return Promise.all([crypto.subtle.digest("SHA-256", enc.encode(a)), crypto.subtle.digest("SHA-256", enc.encode(b))]).then(([x, y]) => {
+    const u = new Uint8Array(x), v = new Uint8Array(y);
+    let d = 0;
+    for (let i = 0; i < u.length; i++) d |= u[i] ^ v[i];
+    return d === 0;
+  });
+}
+
+// El bot (SMS del banco, API de Binance, etc.) avisa aquí cada pago recibido. Requiere BOT_SECRET en Cloudflare.
+async function botPayment(env, request) {
+  if (!env.BOT_SECRET) return json({ error: "No encontrado" }, 404);
+  if (!(await sameSecret(request.headers.get("x-bot-key") || "", env.BOT_SECRET))) return json({ error: "No autorizado." }, 401);
+  const b = await readBody(request);
+  const kind = coerce({ t: "enum", label: "Tipo", list: KINDS, req: true }, b.kind);
+  const reference = coerce({ t: "text", label: "Referencia", req: true, upper: true, max: 64, re: /^[A-Z0-9._-]{4,64}$/ }, b.reference);
+  const amount = coerce({ t: "num", label: "Monto", req: true, min: 0.01, max: 100000000 }, b.amount);
+  const currency = coerce({ t: "enum", label: "Moneda", list: ["USD", "VES", "USDT"], req: true }, b.currency);
+  const r = await rpc(env, "register_incoming", { p_kind: kind, p_ref: reference, p_amount: amount, p_currency: currency, p_source: String(b.source || "bot").slice(0, 40) });
   return json(r);
 }
 
@@ -294,6 +408,7 @@ const RES = {
       name: { t: "text", label: "Nombre", req: true, max: 80 },
       category: { t: "text", label: "Categoría", req: true, max: 60 },
       description: { t: "text", label: "Descripción", max: 300 },
+      icon_url: { t: "text", label: "Logo (enlace https://…)", max: 300, re: /^(https:\/\/|\/img\/)[^\s"'<>]+$/ },
       required_fields: { t: "fields", label: "Datos requeridos", def: ["player_id"] },
       status: { t: "enum", label: "Estado", list: ST, def: "draft" },
       sort_order: { t: "num", label: "Orden", int: true, min: 0, max: 9999, def: 100 },
@@ -318,6 +433,18 @@ const RES = {
       if (!g.length) throw bad("Juego no encontrado.");
       const base = `${g[0].slug}-${out.name}`.toUpperCase().replace(/[^A-Z0-9]+/g, "-").slice(0, 48).replace(/-+$/, "");
       out.sku = `${base}-${rnd(3)}`;
+    },
+  },
+  paymethods: {
+    table: "payment_methods", read: "payments.write", write: "payments.write", order: "sort_order.asc,name.asc", select: "*",
+    spec: {
+      name: { t: "text", label: "Nombre", req: true, max: 60 },
+      kind: { t: "enum", label: "Tipo", list: KINDS, req: true },
+      currency: { t: "enum", label: "Moneda", list: ["USD", "VES", "USDT"], req: true },
+      instructions: { t: "text", label: "Datos para pagar", req: true, max: 800 },
+      min_usd: { t: "num", label: "Mínimo en USD", min: 0, max: 100000, def: 0 },
+      active: { t: "bool", label: "Activo", def: true },
+      sort_order: { t: "num", label: "Orden", int: true, min: 0, max: 9999, def: 100 },
     },
   },
   coupons: {
@@ -514,6 +641,51 @@ async function orderPayment(env, ctx, id, body) {
   return json(r);
 }
 
+async function proofsList(env, ctx, url) {
+  need(ctx, "payments.write");
+  const st = url.searchParams.get("status") || "pending";
+  if (!["pending", "verified", "rejected"].includes(st)) throw bad("Estado no válido.");
+  const rows = await sb(env,
+    `payment_proofs?status=eq.${st}&select=${encodeURIComponent("id,order_id,user_id,reference,proof_path,status,verified_by,reject_reason,created_at,payment_methods(name,kind,currency),orders(amount_usd,discount_usd,rate_applied,status,player_details,products(name,games(name)))")}&order=created_at.asc&limit=100`,
+    { service: true });
+  const ids = [...new Set(rows.map((r) => r.user_id))];
+  let names = new Map();
+  if (ids.length) {
+    const ps = await sb(env, `profiles?id=in.(${ids.join(",")})&select=id,username`, { service: true });
+    names = new Map(ps.map((p) => [p.id, p.username]));
+  }
+  return json(rows.map((r) => ({
+    ...r, has_image: !!r.proof_path, proof_path: undefined, username: names.get(r.user_id) || null,
+    expected: r.orders && r.payment_methods ? expectedIn(r.orders, r.payment_methods.currency) : null,
+  })));
+}
+
+async function proofImage(env, ctx, id) {
+  need(ctx, "payments.write");
+  id = uuidOrFail(id);
+  const rows = await sb(env, `payment_proofs?id=eq.${id}&select=proof_path`, { service: true });
+  if (!rows.length || !rows[0].proof_path) throw bad("Sin captura.", 404);
+  const r = await fetch(`${env.SUPABASE_URL}/storage/v1/object/sign/proofs/${rows[0].proof_path}`, {
+    method: "POST", headers: authHeaders(env.SUPABASE_SERVICE_ROLE_KEY), body: JSON.stringify({ expiresIn: 300 }),
+  });
+  if (!r.ok) throw new Error("storage_sign");
+  const j = await r.json();
+  return json({ url: `${env.SUPABASE_URL}/storage/v1${j.signedURL}` });
+}
+
+async function proofReview(env, ctx, id, body) {
+  need(ctx, "payments.write");
+  id = uuidOrFail(id);
+  const action = String(body.action || "");
+  if (!["approve", "reject"].includes(action)) throw bad("Acción no válida.");
+  let amount = null;
+  if (action === "approve") amount = coerce({ t: "num", label: "Monto recibido", req: true, min: 0.01, max: 100000000 }, body.amount);
+  const reason = String(body.reason || "").trim().slice(0, 200);
+  const r = await rpc(env, "review_proof", { p_proof: id, p_action: action, p_actor: `human:${ctx.user.id}`, p_amount: amount, p_reason: reason });
+  await audit(env, ctx.user.id, action === "approve" ? "proof.approve" : "proof.reject", "payment_proofs", id, null, { amount, reason });
+  return json(r);
+}
+
 async function setRate(env, ctx, body) {
   need(ctx, "rates.write");
   const rate = coerce({ t: "num", label: "Tasa", req: true, min: 0.01, max: 100000000 }, body.rate);
@@ -562,6 +734,9 @@ async function admin(env, request, url) {
   if (a === "orders" && !b && m === "GET") return ordersList(env, ctx, url);
   if (a === "orders" && b && c === "status" && m === "POST") return orderStatus(env, ctx, b, await readBody(request));
   if (a === "orders" && b && c === "payment" && m === "POST") return orderPayment(env, ctx, b, await readBody(request));
+  if (a === "proofs" && !b && m === "GET") return proofsList(env, ctx, url);
+  if (a === "proofs" && b && c === "image" && m === "GET") return proofImage(env, ctx, b);
+  if (a === "proofs" && b && c === "review" && m === "POST") return proofReview(env, ctx, b, await readBody(request));
   if (a === "rate" && m === "POST") return setRate(env, ctx, await readBody(request));
   if (RES[a] && !b && m === "GET") return resList(env, ctx, a);
   if (RES[a] && !b && m === "POST") return resCreate(env, ctx, a, await readBody(request));
@@ -591,6 +766,8 @@ async function health(env) {
   out.catalogo_con_clave_publica = await probe("games?select=id&limit=1", false);
   out.usuarios_con_clave_secreta = await probe("profiles?select=username&limit=1", true);
   out.admin_con_clave_secreta = await probe("coupons?select=id&limit=1", true);
+  out.pagos_con_clave_secreta = await probe("payment_methods?select=id&limit=1", true);
+  out.bot_configurado = !!env.BOT_SECRET;
   return json(out);
 }
 
@@ -606,7 +783,15 @@ export default {
       if (p === "/api/games" && m === "GET") return json(await listGames(env));
       const g = p.match(/^\/api\/games\/([a-z0-9-]+)\/products$/);
       if (g && m === "GET") return json(await listProducts(env, g[1]));
+      const gp = p.match(/^\/api\/games\/([a-z0-9-]+)$/);
+      if (gp && m === "GET") return await gamePage(env, gp[1]);
       if (p === "/api/orders" && m === "POST") return await createOrder(env, request);
+      if (p === "/api/payment-methods" && m === "GET") return await paymentMethods(env, request);
+      if (p === "/api/verify-player/status" && m === "GET") return json({ available: false });
+      if (p === "/api/bot/payments" && m === "POST") return await botPayment(env, request);
+      const op = p.match(/^\/api\/orders\/([0-9a-f-]{36})(\/proof)?$/i);
+      if (op && !op[2] && m === "GET") return await myOrder(env, request, op[1]);
+      if (op && op[2] && m === "POST") return await submitProof(env, request, op[1]);
       if (p === "/api/login" && m === "POST") return await login(env, request);
       if (p === "/api/username" && m === "GET") return await usernameAvailable(env, url);
       if (p === "/api/me" && m === "GET") return await me(env, request);

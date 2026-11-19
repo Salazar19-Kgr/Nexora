@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050907">
+<title>Mis pedidos · NEXORA</title>
+<link rel="icon" href="/img/nexora-emblem.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/nexora.css">
+</head>
+<body>
+<main class="wrap acct">
+  <aside class="side">
+    <div class="who"><div class="av" id="av" aria-hidden="true"></div><div><strong id="uname">…</strong><small id="umail"></small></div></div>
+    <nav aria-label="Mi cuenta">
+      <a href="/cuenta"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-user"/></svg>Mi perfil</a>
+      <a href="/cuenta#recompensas"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-star"/></svg>Recompensas</a>
+      <a href="/pedidos" class="on"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg>Mis pedidos</a>
+      <a href="/ajustes"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"/></svg>Configuración</a>
+      <a href="/ajustes#soporte"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-headset"/></svg>Soporte</a>
+      <button type="button" id="out"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-logout"/></svg>Cerrar sesión</button>
+    </nav>
+  </aside>
+  <section class="panel">
+    <div class="ph"><div><h1>Mis pedidos</h1><p>Sigue el estado de tus recargas</p></div><a class="btn sm" href="/juegos">Nueva recarga</a></div>
+    <div class="orders" id="orders" data-limit="50" aria-live="polite"><p class="muted">Cargando…</p></div>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="/js/chrome.js"></script>
+<script src="/js/art.js"></script>
+<script src="/js/account.js"></script>
+</body>
+</html>

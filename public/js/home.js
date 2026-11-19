@@ -1,97 +1,30 @@
 (function () {
   var $ = function (s) { return document.querySelector(s); };
-  var tiles = $('#tiles'), dots = $('#dots'), dlg = $('#checkout'), msg = $('#msg'), buy = $('#buy');
-  var games = [], token = null;
-
-  window.NX.ready.then(function (o) { token = o.session ? o.session.access_token : null; });
-
-  function hue(slug) { var h = 0; for (var i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) % 360; return h; }
-  function initials(name) {
-    var w = name.replace(/[:\-]/g, ' ').split(/\s+/).filter(Boolean);
-    return (w.length > 1 ? w[0][0] + w[1][0] : name.slice(0, 2)).toUpperCase();
-  }
-  function api(path, opts) {
-    return fetch(path, opts).then(function (r) {
-      return r.json().catch(function () { return null; }).then(function (d) {
-        if (!r.ok) throw new Error((d && d.error) || 'Error de conexión');
-        return d;
-      });
-    });
-  }
-  function note(html) { msg.replaceChildren(); msg.append(html); }
+  var tiles = $('#tiles'), dots = $('#dots'), games = [];
 
   function render(list) {
     tiles.replaceChildren();
-    if (!list.length) {
-      var e = document.createElement('div'); e.className = 'empty'; e.textContent = 'No hay juegos que coincidan.'; tiles.append(e); return;
-    }
+    if (!list.length) { var e = document.createElement('div'); e.className = 'empty'; e.textContent = 'No hay juegos que coincidan.'; tiles.append(e); return; }
     list.forEach(function (g) {
-      var b = document.createElement('button'); b.type = 'button'; b.className = 'tile';
-      b.style.setProperty('--h', hue(g.slug));
-      var art = document.createElement('div'); art.className = 'art'; art.textContent = initials(g.name);
+      var a = document.createElement('a'); a.className = 'tile'; a.href = '/juego?g=' + encodeURIComponent(g.slug);
       var nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = g.name;
-      b.append(art, nm);
-      b.addEventListener('click', function () { openGame(g); });
-      tiles.append(b);
+      a.append(NXArt.logo(g), nm); tiles.append(a);
     });
   }
-
   function renderDots(list) {
     dots.replaceChildren();
     list.slice(0, 6).forEach(function (g) {
-      var b = document.createElement('button'); b.type = 'button'; b.className = 'dot'; b.style.setProperty('--h', hue(g.slug));
-      b.textContent = initials(g.name); b.setAttribute('aria-label', g.name);
-      b.addEventListener('click', function () { openGame(g); });
-      dots.append(b);
+      var a = document.createElement('a'); a.className = 'dot'; a.href = '/juego?g=' + encodeURIComponent(g.slug); a.setAttribute('aria-label', g.name);
+      var l = NXArt.logo(g, 'mini'); a.append(l); dots.append(a);
     });
-    var p = document.createElement('a'); p.className = 'dot plus'; p.href = '#juegos'; p.textContent = '+'; p.setAttribute('aria-label', 'Ver todos los juegos');
+    var p = document.createElement('a'); p.className = 'dot plus'; p.href = '/juegos'; p.textContent = '+'; p.setAttribute('aria-label', 'Ver todos los juegos');
     dots.append(p);
   }
-
-  function openGame(g) {
-    $('#gname').textContent = g.name;
-    $('#server_row').hidden = !(g.required_fields || []).includes('server');
-    $('#player_id').value = ''; $('#coupon').value = '';
-    var sel = $('#product'); sel.replaceChildren();
-    buy.disabled = true;
-    window.NX.ready.then(function (o) {
-      token = o.session ? o.session.access_token : null;
-      if (!token) {
-        var a = document.createElement('a'); a.href = '/login'; a.textContent = 'Inicia sesión'; a.style.color = 'var(--hi)'; a.style.textDecoration = 'underline';
-        msg.replaceChildren(a, document.createTextNode(' para hacer tu recarga.'));
-        dlg.showModal(); return;
-      }
-      msg.textContent = 'Cargando paquetes...';
-      dlg.showModal();
-      api('/api/games/' + g.slug + '/products').then(function (prods) {
-        if (!prods.length) { msg.textContent = 'Este juego aún no tiene paquetes disponibles.'; return; }
-        prods.forEach(function (p) {
-          var op = document.createElement('option'); op.value = p.id;
-          op.textContent = p.name + ' · $' + Number(p.price_usd).toFixed(2); sel.append(op);
-        });
-        msg.textContent = ''; buy.disabled = false;
-      }).catch(function (e) { msg.textContent = e.message; });
-    });
-  }
-
-  $('#form').addEventListener('submit', function (e) {
-    e.preventDefault(); buy.disabled = true; msg.textContent = 'Creando pedido...';
-    api('/api/orders', {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
-      body: JSON.stringify({ product_id: $('#product').value, coupon: $('#coupon').value.trim(), player: { player_id: $('#player_id').value.trim(), server: $('#server').value.trim() } })
-    }).then(function (o) {
-      var a = document.createElement('a'); a.href = '/cuenta#pedidos'; a.textContent = 'Ver mis pedidos'; a.style.color = 'var(--hi)'; a.style.textDecoration = 'underline';
-      var d = Number(o.discount_usd) > 0 ? ' Cupón aplicado: −$' + Number(o.discount_usd).toFixed(2) + '. Total: $' + Number(o.amount_usd).toFixed(2) + '.' : '';
-      msg.replaceChildren(document.createTextNode('Pedido ' + o.order_id.slice(0, 8) + ' creado, pendiente de pago.' + d + ' '), a);
-    }).catch(function (err) { msg.textContent = err.message; buy.disabled = false; });
-  });
-
   $('#q').addEventListener('input', function (e) {
     var t = e.target.value.trim().toLowerCase();
     render(games.filter(function (g) { return g.name.toLowerCase().includes(t); }));
   });
-
-  api('/api/games').then(function (d) { games = d; render(games); renderDots(games); })
+  NXApi('/api/games').then(function (d) { games = d; render(games); renderDots(games); })
     .catch(function () {
       tiles.replaceChildren();
       var e = document.createElement('div'); e.className = 'empty'; e.textContent = 'No se pudo cargar el catálogo. Intenta de nuevo en unos minutos.'; tiles.append(e);

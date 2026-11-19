@@ -12,7 +12,7 @@
     if (!o.sb || !o.session) { location.replace('/login'); return; }
     var sb = o.sb, u = o.session.user;
     var name = (u.user_metadata && u.user_metadata.username) || (u.email || '').split('@')[0] || 'usuario';
-    $('#av').textContent = name.charAt(0);
+    var av = $('#av'); if (av) { var im = document.createElement('img'); im.src = '/img/nexora-character.svg'; im.alt = ''; av.textContent = ''; av.append(im); }
     $('#uname').textContent = name;
     $('#umail').textContent = u.email || '';
     var fu = $('#f-user'), fm = $('#f-mail');
@@ -41,25 +41,24 @@
   });
 
   function loadOrders(sb, list) {
-    sb.from('orders').select('id,amount_usd,status,created_at,products(name,games(name,slug))')
-      .order('created_at', { ascending: false }).limit(10).then(function (r) {
+    var lim = Number(list.dataset.limit) || 10;
+    sb.from('orders').select('id,amount_usd,status,created_at,products(name,games(name,slug,category,icon_url))')
+      .order('created_at', { ascending: false }).limit(lim).then(function (r) {
         list.replaceChildren();
         if (r.error) { var e = document.createElement('p'); e.className = 'muted'; e.textContent = 'No se pudieron cargar tus pedidos.'; list.append(e); return; }
         var c = $('#ocount'); if (c) c.textContent = String(r.data.length);
         if (!r.data.length) { var p = document.createElement('p'); p.className = 'muted'; p.textContent = 'Aún no tienes pedidos. ¡Haz tu primera recarga!'; list.append(p); return; }
         r.data.forEach(function (x) {
-          var game = (x.products && x.products.games && x.products.games.name) || 'Juego';
+          var g = (x.products && x.products.games) || { name: 'Juego', slug: 'x' };
           var pname = (x.products && x.products.name) || 'Paquete';
-          var slug = (x.products && x.products.games && x.products.games.slug) || game.toLowerCase();
           var st = STATUS[x.status] || [x.status, 'wait'];
-          var row = document.createElement('div'); row.className = 'order'; row.style.setProperty('--h', hue(slug));
-          var art = document.createElement('div'); art.className = 'art'; art.textContent = initials(game);
+          var row = document.createElement('a'); row.className = 'order'; row.href = '/pago?o=' + encodeURIComponent(x.id);
           var t = document.createElement('div'); t.className = 't';
-          var b = document.createElement('b'); b.textContent = game + ' · ' + pname;
-          var s = document.createElement('small'); s.textContent = new Date(x.created_at).toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' }) + ' · $' + Number(x.amount_usd).toFixed(2);
+          var b = document.createElement('b'); b.textContent = g.name + ' · ' + pname;
+          var s = document.createElement('small'); s.textContent = new Date(x.created_at).toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' }) + ' · $' + Number(x.amount_usd).toFixed(2) + (x.status === 'pending' ? ' · Toca para pagar' : '');
           t.append(b, s);
           var badge = document.createElement('span'); badge.className = 'st ' + st[1]; badge.textContent = st[0];
-          row.append(art, t, badge); list.append(row);
+          row.append(window.NXArt ? NXArt.logo(g, 'sm') : document.createElement('span'), t, badge); list.append(row);
         });
       });
   }

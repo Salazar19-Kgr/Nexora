@@ -37,22 +37,22 @@
     '<a class="lockup" href="/" aria-label="NEXORA, inicio">' + logo() + '<span class="wm">NEXORA</span></a>' +
     '<nav class="links" aria-label="Principal">' +
     '<a href="/"' + on('/') + '>' + ic('home') + 'Inicio</a>' +
-    '<a href="/#juegos">' + ic('gamepad') + 'Juegos</a>' +
-    '<a id="navacct" href="/login"' + ((path === '/cuenta') ? ' class="on"' : '') + '>' + ic('user') + 'Mi cuenta</a>' +
-    '<a href="/ajustes"' + on('/ajustes') + '>' + ic('settings') + 'Ajustes</a></nav>' +
+    '<a href="/juegos"' + ((path === '/juegos' || path === '/juego' || path === '/pago') ? ' class="on"' : '') + '>' + ic('gamepad') + 'Juegos</a>' +
+    '<a id="navord" href="/pedidos"' + on('/pedidos') + '>' + ic('list') + 'Pedidos</a>' +
+    '<a id="navacct" href="/login"' + ((path === '/cuenta' || path === '/ajustes') ? ' class="on"' : '') + '>' + ic('user') + 'Mi cuenta</a></nav>' +
     '<div class="actions"><a id="userbtn" class="circ" href="/login" aria-label="Iniciar sesión">' + ic('user') + '</a></div></div></header>';
 
   var tabs = '<nav class="tabbar" aria-label="Navegación móvil">' +
     '<a href="/"' + on('/') + '>' + ic('home') + 'Inicio</a>' +
-    '<a href="/#juegos">' + ic('gamepad') + 'Juegos</a>' +
-    '<a id="tabacct" href="/login" class="' + ((path === '/login' || path === '/registro' || path === '/cuenta') ? 'on' : '') + '">' + ic('user') + 'Cuenta</a>' +
-    '<a href="/ajustes"' + on('/ajustes') + '>' + ic('settings') + 'Ajustes</a></nav>';
+    '<a href="/juegos"' + ((path === '/juegos' || path === '/juego' || path === '/pago') ? ' class="on"' : '') + '>' + ic('gamepad') + 'Juegos</a>' +
+    '<a id="tabord" href="/pedidos"' + on('/pedidos') + '>' + ic('list') + 'Pedidos</a>' +
+    '<a id="tabacct" href="/login" class="' + ((path === '/login' || path === '/registro' || path === '/cuenta' || path === '/ajustes') ? 'on' : '') + '">' + ic('user') + 'Cuenta</a></nav>';
 
   var footer = '<footer class="foot"><div class="wrap">' +
     '<div class="brandrow">' + logo() + '<span class="wm">NEXORA</span></div>' +
     '<p class="d">Tu ecosistema gaming: recargas de juegos, productos digitales y herramientas de IA.</p>' +
     '<details><summary>Soporte</summary><p><a href="' + WA + '" target="_blank" rel="noopener">WhatsApp: +58 424 5095002</a></p><p><a href="mailto:prds33735435@gmail.com">prds33735435@gmail.com</a></p></details>' +
-    '<details><summary>Métodos de pago</summary><p>Próximamente: pago móvil, transferencias y USDT, según disponibilidad.</p></details>' +
+    '<details><summary>Métodos de pago</summary><p>Los métodos disponibles se muestran al pagar tu pedido: pago móvil, transferencia, Zelle, USDT y más.</p></details>' +
     '<h3 class="sig">Síguenos</h3>' +
     '<div class="social"><a href="' + WA + '" target="_blank" rel="noopener" aria-label="WhatsApp">' + ic('chat') + '</a><a href="mailto:prds33735435@gmail.com" aria-label="Correo">' + ic('mail') + '</a></div>' +
     '<p class="copy">© 2026 Nexora Ecosistem de AI. Todos los derechos reservados.</p>' +
@@ -61,6 +61,16 @@
   document.body.insertAdjacentHTML('afterbegin', sprite() + header);
   document.body.insertAdjacentHTML('beforeend', footer + tabs);
   window.NXI = { ic: ic, logo: logo, WA: WA };
+  window.NXApi = function (path, opts, token) {
+    opts = opts || {};
+    if (token) opts.headers = Object.assign({ authorization: 'Bearer ' + token }, opts.headers || {});
+    return fetch(path, opts).then(function (r) {
+      return r.json().catch(function () { return null; }).then(function (d) {
+        if (!r.ok) { var e = new Error((d && d.error) || 'Error de conexión'); e.status = r.status; throw e; }
+        return d;
+      });
+    });
+  };
 
   var cfgP = fetch('/api/config').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
   window.NX = {
@@ -84,14 +94,15 @@
     btn.setAttribute('aria-label', 'Menú de cuenta');
     btn.setAttribute('aria-haspopup', 'menu');
     btn.setAttribute('tabindex', '0');
-    btn.textContent = name.charAt(0);
+    var pic = document.createElement('img'); pic.src = '/img/nexora-character.svg'; pic.alt = ''; btn.textContent = ''; btn.appendChild(pic);
     var menu = document.createElement('div');
     menu.className = 'menu';
     menu.hidden = true;
     var p = document.createElement('p');
     p.textContent = 'Hola, ' + name;
     menu.appendChild(p);
-    [['/cuenta', 'Mi cuenta'], ['/ajustes', 'Ajustes'], ['/ajustes#soporte', 'Soporte']].forEach(function (l) {
+    btn.classList.add('has-av');
+    [['/cuenta', 'Mi perfil'], ['/pedidos', 'Mis pedidos'], ['/ajustes', 'Configuración'], ['/ajustes#soporte', 'Soporte']].forEach(function (l) {
       var a = document.createElement('a'); a.href = l[0]; a.textContent = l[1]; menu.appendChild(a);
     });
     var out = document.createElement('button');

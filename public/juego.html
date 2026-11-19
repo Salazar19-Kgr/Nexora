@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050907">
+<title>Recargar · NEXORA</title>
+<link rel="icon" href="/img/nexora-emblem.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/nexora.css">
+</head>
+<body>
+<main class="wrap page narrow">
+  <a class="back" href="/juegos"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-back"/></svg>Juegos</a>
+  <header class="ghead"><div id="glogo"></div><div><h1 id="gname">Cargando…</h1><p class="muted" id="gcat"></p></div></header>
+
+  <section class="step">
+    <h2><span class="n">1</span>Elige tu paquete</h2>
+    <div class="plist" id="plist" role="radiogroup" aria-label="Paquetes"></div>
+  </section>
+
+  <section class="step" id="step2" hidden>
+    <h2><span class="n">2</span>Datos de tu cuenta</h2>
+    <div class="card">
+      <label>ID de jugador<input id="player_id" maxlength="64" autocomplete="off" inputmode="numeric" placeholder="Ej: 123456789"></label>
+      <label id="server_row" hidden>Servidor<input id="server" maxlength="64" autocomplete="off" placeholder="Ej: 2201"></label>
+      <p class="muted" id="vnote">Revisa bien tu ID: las recargas no se pueden cambiar de cuenta.</p>
+      <label>Cupón de descuento (opcional)<input id="coupon" maxlength="32" autocomplete="off" autocapitalize="characters" placeholder="Ej: NX-ABCD-1234"></label>
+    </div>
+  </section>
+  <p id="msg" class="msg" role="status"></p>
+</main>
+<div class="buybar" id="buybar" hidden>
+  <div class="tot"><small>Total</small><b id="total">$0.00</b><small id="totves"></small></div>
+  <button class="btn" id="buy" type="button">Realizar recarga</button>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="/js/chrome.js"></script>
+<script src="/js/art.js"></script>
+<script src="/js/juego.js"></script>
+</body>
+</html>
