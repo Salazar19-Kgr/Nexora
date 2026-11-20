@@ -8,6 +8,7 @@
     discord: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#5865F2" d="M20 4.5A17 17 0 0 0 15.8 3.2l-.5 1a15.7 15.7 0 0 0-4.6 0l-.5-1A17 17 0 0 0 4 4.5C1.3 8.5.6 12.4.9 16.2a17 17 0 0 0 5.2 2.6l1.1-1.8a11 11 0 0 1-1.7-.8l.4-.3a12 12 0 0 0 12.2 0l.4.3c-.5.3-1.1.6-1.7.8l1.1 1.8a17 17 0 0 0 5.2-2.6c.4-4.4-.7-8.3-3.1-11.7zM8.5 14c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2zm7 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2z"/></svg>',
     facebook: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#1877F2" d="M24 12a12 12 0 1 0-13.9 11.85v-8.38H7.08V12h3.02V9.36c0-3 1.79-4.67 4.53-4.67 1.31 0 2.69.23 2.69.23v2.95h-1.51c-1.49 0-1.96.93-1.96 1.88V12h3.33l-.53 3.47h-2.8v8.38A12 12 0 0 0 24 12z"/></svg>'
   };
+  var CEO_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5z" fill="none" stroke="#5cff7a" stroke-width="1.7" stroke-linejoin="round"/><path d="M7.6 14.2l1-4.4 2.2 2.2 1.2-3.2 1.2 3.2 2.2-2.2 1 4.4z" fill="#5cff7a"/></svg>';
   var NAMES = { google: 'Google', discord: 'Discord', facebook: 'Facebook' };
 
   function say(t, ok) { msg.textContent = t || ''; msg.className = 'msg' + (ok ? ' ok' : ''); }
@@ -38,6 +39,12 @@
     });
     box.append(b);
   });
+  if (mode === 'login') {
+    var c = document.createElement('a');
+    c.href = '/ceo'; c.className = 'soc ceo'; c.innerHTML = CEO_ICON;
+    c.setAttribute('aria-label', 'Iniciar sesión como SSECEO'); c.title = 'Iniciar sesión como SSECEO';
+    box.classList.add('four'); box.append(c);
+  }
 
   function post(path, body) {
     return fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })

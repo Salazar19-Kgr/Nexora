@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050907">
+<meta name="robots" content="noindex">
+<title>Acceso SSECEO · NEXORA</title>
+<link rel="icon" href="/img/nexora-emblem.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/nexora.css">
+</head>
+<body>
+<main class="wrap auth-main">
+  <section class="auth-card">
+    <img class="auth-art" src="/img/ceo-art.webp" alt="">
+    <div class="auth-body">
+      <p class="hello">Acceso exclusivo</p>
+      <div class="brand-big"><svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-logo"/></svg><span class="wm">SSECEO</span></div>
+      <p class="lead" id="lead">Verificando…</p>
+
+      <form id="fl" hidden novalidate>
+        <div class="field"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-user"/></svg><input id="lu" type="text" placeholder="Usuario" autocomplete="username" autocapitalize="none" maxlength="30" aria-label="Usuario"></div>
+        <div class="field"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-lock"/></svg><input id="lp" type="password" placeholder="Contraseña" autocomplete="current-password" maxlength="72" aria-label="Contraseña"><button class="eye" type="button" data-eye="lp" aria-label="Mostrar contraseña"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-eye"/></svg></button></div>
+        <p class="msg" id="ml" role="status"></p>
+        <button class="btn block" type="submit" id="bl">Entrar <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+      </form>
+
+      <form id="fr" hidden novalidate>
+        <div class="field"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg><input id="rk" type="password" placeholder="Clave de instalación" autocomplete="off" maxlength="120" aria-label="Clave de instalación"></div>
+        <div class="field"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-user"/></svg><input id="ru" type="text" placeholder="Crea tu usuario" autocomplete="off" autocapitalize="none" maxlength="30" aria-label="Usuario"></div>
+        <div class="field"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-lock"/></svg><input id="rp" type="password" placeholder="Crea tu contraseña (mínimo 8)" autocomplete="new-password" maxlength="72" aria-label="Contraseña"><button class="eye" type="button" data-eye="rp" aria-label="Mostrar contraseña"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-eye"/></svg></button></div>
+        <p class="msg" id="mr" role="status"></p>
+        <button class="btn block" type="submit" id="br">Crear mi acceso <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+      </form>
+      <p class="alt"><a href="/login">← Volver al inicio de sesión</a></p>
+    </div>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="/js/chrome.js"></script>
+<script src="/js/ceo.js"></script>
+</body>
+</html>

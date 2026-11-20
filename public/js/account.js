@@ -12,7 +12,7 @@
     if (!o.sb || !o.session) { location.replace('/login'); return; }
     var sb = o.sb, u = o.session.user;
     var name = (u.user_metadata && u.user_metadata.username) || (u.email || '').split('@')[0] || 'usuario';
-    var av = $('#av'); if (av) { var im = document.createElement('img'); im.src = '/img/nexora-character.svg'; im.alt = ''; av.textContent = ''; av.append(im); }
+    var av = $('#av'); if (av) { var im = document.createElement('img'); im.src = '/img/girl-avatar.webp'; im.alt = ''; av.textContent = ''; av.append(im); }
     $('#uname').textContent = name;
     $('#umail').textContent = u.email || '';
     var fu = $('#f-user'), fm = $('#f-mail');

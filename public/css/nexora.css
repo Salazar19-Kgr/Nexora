@@ -314,3 +314,13 @@ a.order:hover{border-color:var(--acc)}
 @media(prefers-reduced-motion:reduce){.tl li.cur::before{animation:none}}
 .ph .btn.sm{align-self:flex-start}
 [hidden]{display:none!important}
+
+.socials.four{grid-template-columns:repeat(4,1fr)}
+.soc.ceo{border-color:var(--acc);background:rgba(22,217,74,.08);box-shadow:0 0 14px rgba(22,217,74,.25)}
+.soc.ceo svg{width:28px;height:28px}
+.auth-art{height:226px;max-width:48%;opacity:.92}
+@media(min-width:560px){.auth-art{height:96%;max-width:46%;opacity:1}}
+
+.auth-art{-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 30%),linear-gradient(180deg,transparent 0,#000 14%,#000 66%,transparent 100%);mask-image:linear-gradient(90deg,transparent 0,#000 30%),linear-gradient(180deg,transparent 0,#000 14%,#000 66%,transparent 100%);-webkit-mask-composite:source-in;mask-composite:intersect}
+@media(min-width:560px){.auth-art{-webkit-mask-image:linear-gradient(90deg,transparent 0,#000 34%),linear-gradient(180deg,transparent 0,#000 8%);mask-image:linear-gradient(90deg,transparent 0,#000 34%),linear-gradient(180deg,transparent 0,#000 8%)}}
+.promo .art{-webkit-mask-image:linear-gradient(90deg,transparent,#000 38%),linear-gradient(180deg,transparent,#000 10%);mask-image:linear-gradient(90deg,transparent,#000 38%),linear-gradient(180deg,transparent,#000 10%);-webkit-mask-composite:source-in;mask-composite:intersect}

@@ -94,7 +94,7 @@
     btn.setAttribute('aria-label', 'Menú de cuenta');
     btn.setAttribute('aria-haspopup', 'menu');
     btn.setAttribute('tabindex', '0');
-    var pic = document.createElement('img'); pic.src = '/img/nexora-character.svg'; pic.alt = ''; btn.textContent = ''; btn.appendChild(pic);
+    var pic = document.createElement('img'); pic.src = '/img/girl-avatar.webp'; pic.alt = ''; btn.textContent = ''; btn.appendChild(pic);
     var menu = document.createElement('div');
     menu.className = 'menu';
     menu.hidden = true;

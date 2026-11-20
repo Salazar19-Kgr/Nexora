@@ -275,6 +275,7 @@ async function login(env, request) {
   const fail = () => json({ error: "Usuario o contraseña incorrectos." }, 401);
 
   let email = ident;
+  if (/@nexora\.invalid$/i.test(ident)) return fail(); // correo interno del acceso SSECEO: solo entra por /ceo
   if (!ident.includes("@")) {
     if (!/^[A-Za-z0-9_]{3,20}$/.test(ident)) return fail();
     const rows = await sb(env, `profiles?username=eq.${encodeURIComponent(ident)}&select=id`, { service: true });
@@ -539,6 +540,13 @@ async function usersList(env, ctx, url) {
   return json(rows);
 }
 
+async function isCeo(env, id) {
+  try {
+    const r = await sb(env, `ceo_access?id=eq.1&select=user_id`, { service: true });
+    return !!(r[0] && r[0].user_id === id);
+  } catch (e) { return false; }
+}
+
 async function userAction(env, ctx, id, body) {
   id = uuidOrFail(id);
   const cur = await sb(env, `profiles?id=eq.${id}&select=id,role,banned,balance_usd,points,spins,username`, { service: true });
@@ -549,6 +557,7 @@ async function userAction(env, ctx, id, body) {
   if (action === "role") {
     if (!ctx.perms.includes("*")) throw bad("Solo el propietario puede cambiar roles.", 403);
     if (id === ctx.user.id) throw bad("No puedes cambiar tu propio rol.");
+    if (await isCeo(env, id)) throw bad("La cuenta SSECEO no se puede modificar desde aquí.", 403);
     const role = String(body.role || "");
     if (!ROLES.includes(role)) throw bad("Rol no válido.");
     const rows = await sb(env, `profiles?id=eq.${id}`, { method: "PATCH", service: true, headers: { prefer: "return=representation" }, body: { role } });
@@ -558,7 +567,7 @@ async function userAction(env, ctx, id, body) {
   if (action === "ban") {
     need(ctx, "users.grant");
     if (id === ctx.user.id) throw bad("No puedes suspenderte a ti mismo.");
-    if (target.role === "owner") throw bad("No se puede suspender al propietario.", 403);
+    if (target.role === "owner" || (await isCeo(env, id))) throw bad("No se puede suspender al propietario.", 403);
     const banned = body.banned === true;
     await sb(env, `profiles?id=eq.${id}`, { method: "PATCH", service: true, headers: { prefer: "return=representation" }, body: { banned } });
     await audit(env, ctx.user.id, banned ? "user.ban" : "user.unban", "profiles", id, { banned: target.banned }, { banned });
@@ -744,6 +753,78 @@ async function admin(env, request, url) {
   throw bad("No encontrado.", 404);
 }
 
+
+// ======================================================================
+//  ACCESO SSECEO: una sola cuenta de propietario
+//  Crear el acceso exige CEO_SETUP_KEY (secreto de Cloudflare que solo tienes tú).
+// ======================================================================
+const CEO_EMAIL_DOMAIN = "nexora.invalid";
+const ceoRow = async (env) => {
+  const r = await sb(env, "ceo_access?id=eq.1&select=username,email,user_id,failed_attempts,locked_until", { service: true });
+  return r[0] || null;
+};
+const setupEnabled = (env) => !!env.CEO_SETUP_KEY && String(env.CEO_SETUP_KEY).length >= 16;
+
+async function ceoStatus(env) {
+  let row = null;
+  try { row = await ceoRow(env); } catch (e) { return json({ error: "Falta ejecutar la migración 0006_ceo.sql en Supabase." }, 503); }
+  return json({ registered: !!row, setup_enabled: setupEnabled(env) });
+}
+
+async function ceoRegister(env, request) {
+  if (!setupEnabled(env)) throw bad("Falta crear el secreto CEO_SETUP_KEY (mínimo 16 caracteres) en Cloudflare.", 503);
+  const b = await readBody(request);
+  if (!(await sameSecret(String(b.setup_key || ""), String(env.CEO_SETUP_KEY)))) throw bad("Clave de instalación incorrecta.", 403);
+  const username = coerce({ t: "text", label: "Usuario", req: true, max: 30, re: /^[A-Za-z0-9_.-]{3,30}$/ }, b.username);
+  const password = String(b.password || "");
+  if (password.length < 8 || password.length > 72) throw bad("La contraseña debe tener entre 8 y 72 caracteres.");
+  // Reclamo atómico: si ya existe, nadie más puede registrarse.
+  const claimed = await rpc(env, "ceo_claim", { p_username: username });
+  if (!claimed) throw bad("El acceso SSECEO ya fue creado. No se puede registrar otro.", 409);
+  const email = `ceo-${rnd(20).toLowerCase()}@${CEO_EMAIL_DOMAIN}`;
+  try {
+    const r = await fetch(`${env.SUPABASE_URL}/auth/v1/admin/users`, {
+      method: "POST", headers: authHeaders(env.SUPABASE_SERVICE_ROLE_KEY),
+      body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { ceo: true } }),
+    });
+    if (!r.ok) throw new Error("auth_create");
+    const u = await r.json();
+    await sb(env, `profiles?id=eq.${u.id}`, { method: "PATCH", service: true, body: { role: "owner", display_name: username } });
+    await sb(env, "ceo_access?id=eq.1", { method: "PATCH", service: true, body: { email, user_id: u.id } });
+    await audit(env, u.id, "ceo.register", "ceo_access", "1", null, { username });
+  } catch (e) {
+    await sb(env, "ceo_access?id=eq.1", { method: "DELETE", service: true }).catch(() => {}); // deshacer para poder reintentar
+    throw e;
+  }
+  return json({ ok: true }, 201);
+}
+
+async function ceoLogin(env, request) {
+  const b = await request.json().catch(() => null);
+  const username = String((b && b.username) || "").trim().slice(0, 30);
+  const password = String((b && b.password) || "").slice(0, 72);
+  const row = await ceoRow(env);
+  if (!row || !row.email) return json({ error: "Aún no hay un acceso SSECEO creado." }, 404);
+  if (row.locked_until && new Date(row.locked_until) > new Date()) {
+    const mins = Math.max(1, Math.ceil((new Date(row.locked_until) - Date.now()) / 60000));
+    return json({ error: `Acceso bloqueado por seguridad. Intenta de nuevo en ${mins} min.` }, 429);
+  }
+  const fail = async () => {
+    await rpc(env, "ceo_fail", {}).catch(() => {});
+    return json({ error: "Usuario o contraseña incorrectos." }, 401);
+  };
+  if (!username || !password) return json({ error: "Completa usuario y contraseña." }, 400);
+  if (username.toLowerCase() !== String(row.username).toLowerCase()) return fail();
+  const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST", headers: authHeaders(env.SUPABASE_ANON_KEY), body: JSON.stringify({ email: row.email, password }),
+  });
+  if (!res.ok) return fail();
+  const s = await res.json();
+  await rpc(env, "ceo_ok", {}).catch(() => {});
+  await audit(env, row.user_id, "ceo.login", "ceo_access", "1", null, null);
+  return json({ access_token: s.access_token, refresh_token: s.refresh_token });
+}
+
 // Diagnóstico: dice qué falla sin revelar ningún secreto.
 async function health(env) {
   const out = {
@@ -768,6 +849,7 @@ async function health(env) {
   out.admin_con_clave_secreta = await probe("coupons?select=id&limit=1", true);
   out.pagos_con_clave_secreta = await probe("payment_methods?select=id&limit=1", true);
   out.bot_configurado = !!env.BOT_SECRET;
+  out.ceo_listo = setupEnabled(env);
   return json(out);
 }
 
@@ -793,6 +875,9 @@ export default {
       if (op && !op[2] && m === "GET") return await myOrder(env, request, op[1]);
       if (op && op[2] && m === "POST") return await submitProof(env, request, op[1]);
       if (p === "/api/login" && m === "POST") return await login(env, request);
+      if (p === "/api/ceo/status" && m === "GET") return await ceoStatus(env);
+      if (p === "/api/ceo/register" && m === "POST") return await ceoRegister(env, request);
+      if (p === "/api/ceo/login" && m === "POST") return await ceoLogin(env, request);
       if (p === "/api/username" && m === "GET") return await usernameAvailable(env, url);
       if (p === "/api/me" && m === "GET") return await me(env, request);
       if (p === "/api/redeem" && m === "POST") return await redeem(env, request);
