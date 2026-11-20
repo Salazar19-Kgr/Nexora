@@ -350,3 +350,13 @@ body.isadmin .adm{padding-top:16px}
 .field.sel select{height:54px;padding:0 14px 0 46px;border:1px solid var(--line2);border-radius:14px;background:rgba(5,9,7,.88);width:100%;color:inherit;font:inherit}
 .cbar{margin:0 0 12px}.cbar label{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .cbar select{padding:10px 12px;border-radius:12px;background:#050907;color:inherit;border:1px solid var(--line2,#1c4a2c);font:inherit}
+/* ---- Sin deslizar: las opciones de la cuenta se ven todas, en cuadrícula ---- */
+@media(max-width:859px){
+  .side nav{display:grid;grid-template-columns:1fr 1fr;gap:8px;overflow:visible}
+  .side nav a,.side nav button{white-space:normal;border:1px solid var(--line2);background:rgba(5,9,7,.5);padding:13px 12px;font-size:.92rem}
+  .side nav a.on{border-color:var(--acc)}
+  .side nav button{grid-column:1/-1;justify-content:center;color:#ff8a8a}
+}
+/* Menú del panel admin: todas las secciones visibles, sin deslizar */
+.anav{flex-wrap:wrap;overflow:visible}
+.ctab{flex-wrap:wrap;overflow:visible}
