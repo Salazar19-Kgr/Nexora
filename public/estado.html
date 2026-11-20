@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050907">
+<meta name="robots" content="noindex">
+<title>Estado del sistema · NEXORA</title>
+<link rel="icon" href="/img/nexora-emblem.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/css/nexora.css">
+<style>
+.st{max-width:520px;margin:0 auto;padding:22px 16px 60px}
+.st h1{font-size:1.5rem;margin:6px 0 4px}
+.st .sub{color:var(--mut,#8aa196);margin:0 0 18px}
+.st .top{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.st .top img{width:44px;height:44px}
+.row{display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--line,#12301f);border-radius:16px;background:var(--card,#0a120e);margin-bottom:10px}
+.dot{width:12px;height:12px;border-radius:50%;flex:none;background:#566;box-shadow:0 0 0 4px rgba(120,140,130,.15)}
+.ok .dot{background:#2dff7a;box-shadow:0 0 12px #2dff7a,0 0 0 4px rgba(45,255,122,.15)}
+.no .dot{background:#ff5d5d;box-shadow:0 0 12px #ff5d5d,0 0 0 4px rgba(255,93,93,.15)}
+.warn .dot{background:#ffc94d;box-shadow:0 0 12px #ffc94d,0 0 0 4px rgba(255,201,77,.15)}
+.row b{display:block}.row small{color:var(--mut,#8aa196)}
+.tag{margin-left:auto;font-weight:700;font-size:.85rem}
+.ok .tag{color:#2dff7a}.no .tag{color:#ff7a7a}.warn .tag{color:#ffc94d}
+.go{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+.go .btn{flex:1;min-width:150px;text-align:center;text-decoration:none}
+</style>
+</head>
+<body>
+<main class="st">
+  <div class="top"><img src="/img/nexora-emblem.svg" alt=""><div><h1>Estado del sistema</h1><p class="sub" style="margin:0">Revisión rápida de NEXORA</p></div></div>
+  <div id="list"><div class="row"><span class="dot"></span><div><b>Revisando…</b></div></div></div>
+  <div class="go">
+    <a class="btn" href="/ceo">Acceso SSECEO</a>
+    <a class="btn" href="/">Ir a la tienda</a>
+  </div>
+</main>
+<script>
+(function () {
+  var L = document.getElementById('list');
+  function row(state, title, note, tag) {
+    var d = document.createElement('div'); d.className = 'row ' + state;
+    d.innerHTML = '<span class="dot"></span><div><b></b><small></small></div><span class="tag"></span>';
+    d.querySelector('b').textContent = title; d.querySelector('small').textContent = note; d.querySelector('.tag').textContent = tag;
+    L.appendChild(d);
+  }
+  function ok(v) { return v === true || (v && v.ok === true); }
+  fetch('/api/health', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (h) {
+    L.innerHTML = '';
+    var items = [
+      ['Conexión con la base de datos', 'Dirección y claves cargadas', h.url_configurada && h.clave_publica_cargada && h.clave_secreta_cargada],
+      ['Catálogo de juegos', 'Lectura pública de juegos y precios', h.catalogo_con_clave_publica],
+      ['Usuarios', 'Registro e inicio de sesión', h.usuarios_con_clave_secreta],
+      ['Panel de administración', 'Cupones, códigos, ruleta y roles', h.admin_con_clave_secreta],
+      ['Pagos y comprobantes', 'Métodos, capturas y verificación', h.pagos_con_clave_secreta],
+      ['Acceso SSECEO', 'Clave de instalación configurada', h.ceo_listo]
+    ];
+    items.forEach(function (i) { row(ok(i[2]) ? 'ok' : 'no', i[0], ok(i[2]) ? i[1] : (i[2] && i[2].mensaje) || 'Falta configurar o ejecutar el SQL', ok(i[2]) ? 'Listo' : 'Falla'); });
+    row(h.bot_configurado ? 'ok' : 'warn', 'Bot de pagos', h.bot_configurado ? 'Conectado' : 'Opcional: se conecta al final', h.bot_configurado ? 'Listo' : 'Pendiente');
+  }).catch(function () { L.innerHTML = ''; row('no', 'No se pudo consultar', 'Revisa tu conexión', 'Falla'); });
+})();
+</script>
+</body>
+</html>
