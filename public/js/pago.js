@@ -6,8 +6,9 @@
   function say(t, ok) { var m = $('#msg'); m.textContent = t || ''; m.className = 'msg' + (ok ? ' ok' : ''); }
   function usd(n) { return '$' + Number(n).toFixed(2); }
   function fmt(n) { return Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  var SYM = { VES: 'Bs ', DOP: 'RD$ ', MXN: 'MX$ ' };
   function expected(m) {
-    if (m.currency === 'VES') return 'Bs ' + fmt(Math.round(Number(order.amount_usd) * Number(order.rate_applied || 0) * 100) / 100);
+    if (SYM[m.currency]) return SYM[m.currency] + fmt(Math.round(Number(order.amount_usd) * Number(order.rate_applied || 0) * 100) / 100);
     return (m.currency === 'USDT' ? '' : '$') + fmt(order.amount_usd) + (m.currency === 'USDT' ? ' USDT' : '');
   }
   function copy(text, btn) {

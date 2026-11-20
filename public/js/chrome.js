@@ -30,6 +30,7 @@
   function logo(cls) { return '<svg class="' + (cls || 'logo') + '" viewBox="0 0 40 40" aria-hidden="true"><use href="#i-logo"/></svg>'; }
 
   var path = location.pathname.replace(/\/$/, '').replace(/\.html$/, '') || '/';
+  var ADMIN = path === '/admin';
   function on(p) { return path === p ? ' class="on"' : ''; }
   var WA = 'https://wa.me/584245095002?text=Hola%20NEXORA';
 
@@ -58,8 +59,17 @@
     '<p class="copy">© 2026 Nexora Ecosistem de AI. Todos los derechos reservados.</p>' +
     '<p class="small">NEXORA no es afiliada oficial de los juegos mostrados.</p></div></footer>';
 
-  document.body.insertAdjacentHTML('afterbegin', sprite() + header);
-  document.body.insertAdjacentHTML('beforeend', footer + tabs);
+  // El panel de administración es solo para administrar: sin tienda, sin perfil, sin soporte.
+  var adminHeader = '<header class="topbar adm-top"><div class="wrap bar">' +
+    '<span class="lockup">' + logo() + '<span class="wm">NEXORA</span><span class="admtag">ADMIN</span></span>' +
+    '<div class="actions"><button type="button" id="admout" class="btn ghost sm">' + ic('logout') + 'Salir</button></div></div></header>';
+  if (ADMIN) {
+    document.body.classList.add('isadmin');
+    document.body.insertAdjacentHTML('afterbegin', sprite() + adminHeader);
+  } else {
+    document.body.insertAdjacentHTML('afterbegin', sprite() + header);
+    document.body.insertAdjacentHTML('beforeend', footer + tabs);
+  }
   window.NXI = { ic: ic, logo: logo, WA: WA };
   window.NXApi = function (path, opts, token) {
     opts = opts || {};
@@ -83,9 +93,46 @@
     })()
   };
 
+  var COUNTRIES = [['VE', 'Venezuela'], ['DO', 'República Dominicana'], ['PA', 'Panamá'], ['MX', 'México'], ['US', 'Estados Unidos']];
+  window.NXCountries = COUNTRIES;
+
+  // Quien no tiene país (cuentas viejas o con Google/Discord/Facebook) debe elegirlo antes de seguir.
+  function needCountry(o) {
+    if (/^\/(login|registro|ceo|estado)$/.test(path)) return;
+    var tk = o.session.access_token;
+    window.NXApi('/api/me', null, tk).then(function (m) {
+      if (m && m.country) return;
+      var wrap = document.createElement('div'); wrap.className = 'cgate'; wrap.setAttribute('role', 'dialog'); wrap.setAttribute('aria-modal', 'true');
+      var box = document.createElement('div'); box.className = 'cbox';
+      var h2 = document.createElement('h2'); h2.textContent = 'Elige tu país';
+      var p = document.createElement('p'); p.textContent = 'Lo necesitamos para mostrarte los precios y métodos de pago de tu país. Solo se elige una vez.';
+      var sel = document.createElement('select'); sel.setAttribute('aria-label', 'País');
+      var first = document.createElement('option'); first.value = ''; first.textContent = 'Selecciona…'; sel.append(first);
+      COUNTRIES.forEach(function (c) { var op = document.createElement('option'); op.value = c[0]; op.textContent = c[1]; sel.append(op); });
+      var msg = document.createElement('p'); msg.className = 'msg';
+      var go = document.createElement('button'); go.type = 'button'; go.className = 'btn block'; go.textContent = 'Guardar y continuar';
+      go.addEventListener('click', function () {
+        if (!sel.value) { msg.textContent = 'Elige tu país para continuar.'; return; }
+        go.disabled = true;
+        window.NXApi('/api/country', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ country: sel.value }) }, tk)
+          .then(function () { location.reload(); })
+          .catch(function (e) { msg.textContent = e.message; go.disabled = false; });
+      });
+      box.append(h2, p, sel, msg, go); wrap.append(box); document.body.append(wrap);
+    }).catch(function () {});
+  }
+
   window.NX.ready.then(function (o) {
+    if (ADMIN) {
+      var ob = document.getElementById('admout');
+      if (ob) ob.addEventListener('click', function () { (o.sb ? o.sb.auth.signOut() : Promise.resolve()).then(function () { location.replace('/login'); }); });
+      return;
+    }
     if (!o.session) return;
     var u = o.session.user;
+    // La cuenta SSECEO es solo de administración: nunca entra a la tienda.
+    if (/@nexora\.invalid$/i.test(u.email || '') && !/^\/(ceo|login)$/.test(path)) { location.replace('/admin'); return; }
+    needCountry(o);
     var name = (u.user_metadata && u.user_metadata.username) || (u.email || '').split('@')[0] || 'usuario';
     ['navacct', 'tabacct'].forEach(function (id) { var a = document.getElementById(id); if (a) a.setAttribute('href', '/cuenta'); });
     var btn = document.getElementById('userbtn');

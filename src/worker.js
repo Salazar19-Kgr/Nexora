@@ -52,6 +52,14 @@ async function rpc(env, fn, args) {
   return b;
 }
 
+// Países habilitados y su moneda local (USD = sin conversión).
+const COUNTRIES = ["VE", "DO", "PA", "MX", "US"];
+const COUNTRY_NAME = { VE: "Venezuela", DO: "República Dominicana", PA: "Panamá", MX: "México", US: "Estados Unidos" };
+const LOCAL_CUR = { VE: "VES", DO: "DOP", PA: "USD", MX: "MXN", US: "USD" };
+const CURRENCIES = ["USD", "VES", "USDT", "DOP", "MXN"];
+const RATE_CUR = ["VES", "DOP", "MXN"];
+const asCountry = (v) => { const c = String(v || "").toUpperCase(); return COUNTRIES.includes(c) ? c : null; };
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuidOrFail = (v) => { if (!UUID.test(String(v))) throw bad("Identificador no válido."); return String(v).toLowerCase(); };
 
@@ -73,6 +81,7 @@ const PG_MSG = {
   referencia_usada: [409, "Esa referencia ya fue usada en otro pago."],
   comprobante_no_pendiente: [409, "Ese comprobante ya fue revisado."],
   accion_invalida: [400, "Acción no válida."],
+  pais_requerido: [409, "Elige tu país para continuar."],
 };
 
 // ---------- Sesión ----------
@@ -108,19 +117,37 @@ async function listProducts(env, slug) {
   return sb(env, `products?game_id=eq.${g[0].id}&status=eq.active&select=id,name,price_usd&order=price_usd.asc`);
 }
 
-async function latestRate(env) {
-  const r = await sb(env, "exchange_rates?quote=eq.VES&order=fetched_at.desc&limit=1&select=rate", { service: true });
+async function latestRate(env, quote = "VES") {
+  if (!RATE_CUR.includes(quote)) return null;
+  const r = await sb(env, `exchange_rates?quote=eq.${quote}&order=fetched_at.desc&limit=1&select=rate`, { service: true });
   return r[0] ? Number(r[0].rate) : null;
 }
 
-async function gamePage(env, slug) {
+// País del usuario con sesión (verdad del servidor) o, para visitantes, el que eligió en la pantalla.
+async function countryOf(env, request, url) {
+  const user = await userFromToken(env, request);
+  if (user) {
+    const p = await sb(env, `profiles?id=eq.${user.id}&select=country`, { service: true });
+    return { user, country: (p[0] && p[0].country) || null, locked: true };
+  }
+  return { user: null, country: asCountry(url.searchParams.get("country")), locked: false };
+}
+
+async function gamePage(env, request, url, slug) {
   const g = await sb(env, `games?slug=eq.${encodeURIComponent(slug)}&status=eq.active&select=id,slug,name,category,description,icon_url,required_fields`);
   if (!g.length) throw bad("Juego no encontrado.", 404);
-  const [products, rate] = await Promise.all([
-    sb(env, `products?game_id=eq.${g[0].id}&status=eq.active&select=id,name,price_usd&order=price_usd.asc`),
-    latestRate(env),
+  const { country, locked } = await countryOf(env, request, url);
+  if (!country) return json({ game: g[0], products: [], rate: null, country: null, locked, currency: null });
+  const currency = LOCAL_CUR[country];
+  const [rows, rate] = await Promise.all([
+    sb(env, `products?game_id=eq.${g[0].id}&status=eq.active&select=id,name,product_prices(country,price_usd)`),
+    latestRate(env, currency),
   ]);
-  return json({ game: g[0], products, rate });
+  const products = rows
+    .map((p) => ({ id: p.id, name: p.name, price_usd: (p.product_prices.find((x) => x.country === country) || {}).price_usd }))
+    .filter((p) => p.price_usd != null)
+    .sort((a, b) => Number(a.price_usd) - Number(b.price_usd));
+  return json({ game: g[0], products, rate, country, locked, currency });
 }
 
 async function createOrder(env, request) {
@@ -144,18 +171,21 @@ async function createOrder(env, request) {
 const KINDS = ["pago_movil", "transferencia", "zelle", "binance", "usdt", "efectivo", "otro"];
 const money = (n) => Math.round(Number(n) * 100) / 100;
 const expectedIn = (order, currency) =>
-  currency === "VES" ? money(Number(order.amount_usd) * Number(order.rate_applied || 0)) : money(order.amount_usd);
+  RATE_CUR.includes(currency) ? money(Number(order.amount_usd) * Number(order.rate_applied || 0)) : money(order.amount_usd);
 
 async function paymentMethods(env, request) {
-  await needUser(env, request);
-  return json(await sb(env, "payment_methods?active=eq.true&select=id,name,kind,currency,instructions,min_usd&order=sort_order.asc,name.asc", { service: true }));
+  const user = await needUser(env, request);
+  const p = await sb(env, `profiles?id=eq.${user.id}&select=country`, { service: true });
+  const country = p[0] && p[0].country;
+  if (!country) throw bad("Elige tu país para continuar.", 409);
+  return json(await sb(env, `payment_methods?active=eq.true&country=eq.${country}&select=id,name,kind,currency,instructions,min_usd&order=sort_order.asc,name.asc`, { service: true }));
 }
 
 async function myOrder(env, request, id) {
   const user = await needUser(env, request);
   id = uuidOrFail(id);
   const rows = await sb(env,
-    `orders?id=eq.${id}&user_id=eq.${user.id}&select=${encodeURIComponent("id,status,amount_usd,discount_usd,rate_applied,player_details,created_at,products(name,games(name,slug,icon_url,category))")}`,
+    `orders?id=eq.${id}&user_id=eq.${user.id}&select=${encodeURIComponent("id,status,amount_usd,discount_usd,rate_applied,country,player_details,created_at,products(name,games(name,slug,icon_url,category))")}`,
     { service: true });
   if (!rows.length) throw bad("Pedido no encontrado.", 404);
   const proofs = await sb(env, `payment_proofs?order_id=eq.${id}&select=status,reject_reason,created_at,payment_methods(name)&order=created_at.desc&limit=1`, { service: true });
@@ -227,21 +257,32 @@ async function botPayment(env, request) {
   const kind = coerce({ t: "enum", label: "Tipo", list: KINDS, req: true }, b.kind);
   const reference = coerce({ t: "text", label: "Referencia", req: true, upper: true, max: 64, re: /^[A-Z0-9._-]{4,64}$/ }, b.reference);
   const amount = coerce({ t: "num", label: "Monto", req: true, min: 0.01, max: 100000000 }, b.amount);
-  const currency = coerce({ t: "enum", label: "Moneda", list: ["USD", "VES", "USDT"], req: true }, b.currency);
+  const currency = coerce({ t: "enum", label: "Moneda", list: CURRENCIES, req: true }, b.currency);
   const r = await rpc(env, "register_incoming", { p_kind: kind, p_ref: reference, p_amount: amount, p_currency: currency, p_source: String(b.source || "bot").slice(0, 40) });
   return json(r);
 }
 
 // ---------- Cuenta del usuario: perfil, canje y ruleta ----------
 async function myProfile(env, id) {
-  const rows = await sb(env, `profiles?id=eq.${id}&select=username,balance_usd,points,spins,banned`, { service: true });
-  return rows[0] || { username: null, balance_usd: 0, points: 0, spins: 0, banned: false };
+  const rows = await sb(env, `profiles?id=eq.${id}&select=username,balance_usd,points,spins,banned,country`, { service: true });
+  return rows[0] || { username: null, balance_usd: 0, points: 0, spins: 0, banned: false, country: null };
 }
 
 async function me(env, request) {
   const user = await needUser(env, request);
   const p = await myProfile(env, user.id);
-  return json({ username: p.username, balance_usd: p.balance_usd, points: p.points, spins: p.spins });
+  return json({ username: p.username, balance_usd: p.balance_usd, points: p.points, spins: p.spins, country: p.country });
+}
+
+// El país se elige una sola vez (el cliente no puede cambiarlo después; lo cambia un administrador).
+async function setCountry(env, request) {
+  const user = await needUser(env, request);
+  const b = await readBody(request);
+  const country = asCountry(b.country);
+  if (!country) throw bad("Elige un país de la lista.");
+  const rows = await sb(env, `profiles?id=eq.${user.id}&country=is.null`, { method: "PATCH", service: true, headers: { prefer: "return=representation" }, body: { country } });
+  if (!rows.length) throw bad("Tu país ya está definido. Si necesitas cambiarlo, escríbenos por soporte.", 409);
+  return json({ country });
 }
 
 async function redeem(env, request) {
@@ -441,7 +482,8 @@ const RES = {
     spec: {
       name: { t: "text", label: "Nombre", req: true, max: 60 },
       kind: { t: "enum", label: "Tipo", list: KINDS, req: true },
-      currency: { t: "enum", label: "Moneda", list: ["USD", "VES", "USDT"], req: true },
+      country: { t: "enum", label: "País", list: COUNTRIES, req: true },
+      currency: { t: "enum", label: "Moneda", list: CURRENCIES, req: true },
       instructions: { t: "text", label: "Datos para pagar", req: true, max: 800 },
       min_usd: { t: "num", label: "Mínimo en USD", min: 0, max: 100000, def: 0 },
       active: { t: "bool", label: "Activo", def: true },
@@ -490,6 +532,38 @@ const RES = {
   },
 };
 
+async function upsertPrice(env, productId, country, price) {
+  await sb(env, "product_prices?on_conflict=product_id,country", {
+    method: "POST", service: true, headers: { prefer: "resolution=merge-duplicates,return=minimal" },
+    body: { product_id: productId, country, price_usd: price, updated_at: new Date().toISOString() },
+  });
+}
+
+// Precios por país: GET lista todos; POST fija (o borra si el precio va vacío) el precio de un paquete en un país.
+async function pricesList(env, ctx) {
+  need(ctx, "catalog.read");
+  return json(await sb(env, "product_prices?select=product_id,country,price_usd&limit=5000", { service: true }));
+}
+async function priceSet(env, ctx, body) {
+  need(ctx, "catalog.write");
+  const product = uuidOrFail(body.product_id);
+  const country = asCountry(body.country);
+  if (!country) throw bad("País no válido.");
+  const prod = await sb(env, `products?id=eq.${product}&select=id`, { service: true });
+  if (!prod.length) throw bad("Paquete no encontrado.", 404);
+  const empty = body.price_usd === null || body.price_usd === undefined || String(body.price_usd).trim() === "";
+  if (empty) {
+    await sb(env, `product_prices?product_id=eq.${product}&country=eq.${country}`, { method: "DELETE", service: true });
+    await audit(env, ctx.user.id, "price.remove", "product_prices", product, null, { country });
+    return json({ product_id: product, country, price_usd: null });
+  }
+  const price = coerce({ t: "num", label: "Precio", req: true, min: 0, max: 100000 }, body.price_usd);
+  await upsertPrice(env, product, country, price);
+  if (country === "VE") await sb(env, `products?id=eq.${product}`, { method: "PATCH", service: true, body: { price_usd: price } });
+  await audit(env, ctx.user.id, "price.set", "product_prices", product, null, { country, price });
+  return json({ product_id: product, country, price_usd: price });
+}
+
 async function resList(env, ctx, name) {
   const r = RES[name];
   need(ctx, r.read);
@@ -507,6 +581,7 @@ async function resCreate(env, ctx, name, body) {
   if (r.check) r.check(out);
   if (r.beforeCreate) await r.beforeCreate(env, out);
   const rows = await sb(env, r.table, { method: "POST", service: true, headers: { prefer: "return=representation" }, body: out });
+  if (name === "products") await upsertPrice(env, rows[0].id, "VE", out.price_usd);
   await audit(env, ctx.user.id, `${name}.create`, name, rows[0].id, null, rows[0]);
   return json(rows[0], 201);
 }
@@ -521,6 +596,7 @@ async function resUpdate(env, ctx, name, id, body) {
   if (!Object.keys(out).length) throw bad("No hay nada que cambiar.");
   if (r.check) r.check({ ...cur[0], ...out });
   const rows = await sb(env, `${r.table}?id=eq.${id}`, { method: "PATCH", service: true, headers: { prefer: "return=representation" }, body: out });
+  if (name === "products" && "price_usd" in out) await upsertPrice(env, id, "VE", out.price_usd);
   await audit(env, ctx.user.id, `${name}.update`, name, id, cur[0], rows[0]);
   return json(rows[0]);
 }
@@ -530,7 +606,7 @@ async function usersList(env, ctx, url) {
   need(ctx, "users.read");
   const q = (url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 60);
   const [profiles, auth] = await Promise.all([
-    sb(env, "profiles?select=id,username,display_name,role,balance_usd,points,spins,banned,created_at&order=created_at.desc&limit=200", { service: true }),
+    sb(env, "profiles?select=id,username,display_name,role,balance_usd,points,spins,banned,country,created_at&order=created_at.desc&limit=200", { service: true }),
     fetch(`${env.SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=200`, { headers: authHeaders(env.SUPABASE_SERVICE_ROLE_KEY) })
       .then((r) => (r.ok ? r.json() : { users: [] })).catch(() => ({ users: [] })),
   ]);
@@ -573,6 +649,14 @@ async function userAction(env, ctx, id, body) {
     await audit(env, ctx.user.id, banned ? "user.ban" : "user.unban", "profiles", id, { banned: target.banned }, { banned });
     return json({ banned });
   }
+  if (action === "country") {
+    need(ctx, "users.grant");
+    const country = asCountry(body.country);
+    if (!country) throw bad("País no válido.");
+    await sb(env, `profiles?id=eq.${id}`, { method: "PATCH", service: true, body: { country } });
+    await audit(env, ctx.user.id, "user.country", "profiles", id, null, { country });
+    return json({ country });
+  }
   if (action === "adjust") {
     need(ctx, "users.grant");
     const kind = String(body.kind || "");
@@ -607,7 +691,7 @@ async function ordersList(env, ctx, url) {
   let f = "";
   if (st) { if (!STATUSES.includes(st)) throw bad("Estado no válido."); f = `&status=eq.${st}`; }
   const rows = await sb(env,
-    `orders?select=${encodeURIComponent("id,user_id,amount_usd,discount_usd,status,created_at,player_details,rate_applied,products(name,sku,games(name)),payments(id,method,reference,amount,currency,created_at)")}&order=created_at.desc&limit=100${f}`,
+    `orders?select=${encodeURIComponent("id,user_id,amount_usd,discount_usd,status,created_at,country,player_details,rate_applied,products(name,sku,games(name)),payments(id,method,reference,amount,currency,created_at)")}&order=created_at.desc&limit=100${f}`,
     { service: true });
   const ids = [...new Set(rows.map((o) => o.user_id).filter(Boolean))];
   let names = new Map();
@@ -642,7 +726,7 @@ async function orderPayment(env, ctx, id, body) {
   const method = coerce({ t: "enum", label: "Método", list: ["pago_movil", "transferencia", "zelle", "binance", "usdt", "efectivo", "otro"], req: true }, body.method);
   const reference = coerce({ t: "text", label: "Referencia", req: true, upper: true, max: 64, re: /^[A-Z0-9._-]{4,64}$/ }, body.reference);
   const amount = coerce({ t: "num", label: "Monto", req: true, min: 0.01, max: 100000000 }, body.amount);
-  const currency = coerce({ t: "enum", label: "Moneda", list: ["USD", "VES", "USDT"], req: true }, body.currency);
+  const currency = coerce({ t: "enum", label: "Moneda", list: CURRENCIES, req: true }, body.currency);
   const r = await rpc(env, "confirm_payment", {
     p_order: id, p_method: method, p_ref: reference, p_amount: amount, p_currency: currency, p_actor: `human:${ctx.user.id}`,
   });
@@ -697,22 +781,26 @@ async function proofReview(env, ctx, id, body) {
 
 async function setRate(env, ctx, body) {
   need(ctx, "rates.write");
+  const quote = body.quote === undefined ? "VES" : String(body.quote);
+  if (!RATE_CUR.includes(quote)) throw bad("Moneda no válida para tasa.");
   const rate = coerce({ t: "num", label: "Tasa", req: true, min: 0.01, max: 100000000 }, body.rate);
   const rows = await sb(env, "exchange_rates", {
     method: "POST", service: true, headers: { prefer: "return=representation" },
-    body: { base: "USD", quote: "VES", rate, source: `manual:${ctx.user.id}` },
+    body: { base: "USD", quote, rate, source: `manual:${ctx.user.id}` },
   });
-  await audit(env, ctx.user.id, "rate.set", "exchange_rates", rows[0].id, null, { rate });
-  return json({ rate });
+  await audit(env, ctx.user.id, "rate.set", "exchange_rates", rows[0].id, null, { quote, rate });
+  return json({ quote, rate });
 }
 
 async function stats(env, ctx) {
   need(ctx, "stats");
-  const [s, r] = await Promise.all([
+  const [s, ...rs] = await Promise.all([
     rpc(env, "admin_stats", {}),
-    sb(env, "exchange_rates?quote=eq.VES&order=fetched_at.desc&limit=1&select=rate,fetched_at", { service: true }),
+    ...RATE_CUR.map((q) => sb(env, `exchange_rates?quote=eq.${q}&order=fetched_at.desc&limit=1&select=rate,fetched_at`, { service: true })),
   ]);
-  return json({ ...s, rate: r[0] || null });
+  const rates = {};
+  RATE_CUR.forEach((q, i) => { rates[q] = rs[i][0] || null; });
+  return json({ ...s, rate: rates.VES, rates });
 }
 
 async function auditList(env, ctx) {
@@ -747,6 +835,8 @@ async function admin(env, request, url) {
   if (a === "proofs" && b && c === "image" && m === "GET") return proofImage(env, ctx, b);
   if (a === "proofs" && b && c === "review" && m === "POST") return proofReview(env, ctx, b, await readBody(request));
   if (a === "rate" && m === "POST") return setRate(env, ctx, await readBody(request));
+  if (a === "prices" && m === "GET") return pricesList(env, ctx);
+  if (a === "prices" && m === "POST") return priceSet(env, ctx, await readBody(request));
   if (RES[a] && !b && m === "GET") return resList(env, ctx, a);
   if (RES[a] && !b && m === "POST") return resCreate(env, ctx, a, await readBody(request));
   if (RES[a] && b && m === "POST") return resUpdate(env, ctx, a, b, await readBody(request));
@@ -866,7 +956,7 @@ export default {
       const g = p.match(/^\/api\/games\/([a-z0-9-]+)\/products$/);
       if (g && m === "GET") return json(await listProducts(env, g[1]));
       const gp = p.match(/^\/api\/games\/([a-z0-9-]+)$/);
-      if (gp && m === "GET") return await gamePage(env, gp[1]);
+      if (gp && m === "GET") return await gamePage(env, request, url, gp[1]);
       if (p === "/api/orders" && m === "POST") return await createOrder(env, request);
       if (p === "/api/payment-methods" && m === "GET") return await paymentMethods(env, request);
       if (p === "/api/verify-player/status" && m === "GET") return json({ available: false });
@@ -880,6 +970,7 @@ export default {
       if (p === "/api/ceo/login" && m === "POST") return await ceoLogin(env, request);
       if (p === "/api/username" && m === "GET") return await usernameAvailable(env, url);
       if (p === "/api/me" && m === "GET") return await me(env, request);
+      if (p === "/api/country" && m === "POST") return await setCountry(env, request);
       if (p === "/api/redeem" && m === "POST") return await redeem(env, request);
       if (p === "/api/wheel" && m === "GET") return await wheelInfo(env, request);
       if (p === "/api/spin" && m === "POST") return await spin(env, request);

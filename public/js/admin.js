@@ -14,6 +14,11 @@
     method: { pago_movil: 'Pago móvil', transferencia: 'Transferencia', zelle: 'Zelle', binance: 'Binance Pay', usdt: 'USDT', efectivo: 'Efectivo', otro: 'Otro' },
     prize: { none: 'Sin premio', balance: 'Saldo', points: 'Puntos', spins: 'Giros' }
   };
+  var CTRY = { VE: 'Venezuela', DO: 'República Dominicana', PA: 'Panamá', MX: 'México', US: 'Estados Unidos' };
+  var CTRY_KEYS = ['VE', 'DO', 'PA', 'MX', 'US'];
+  var CTRY_CUR = { VE: 'VES', DO: 'DOP', PA: 'USD', MX: 'MXN', US: 'USD' };
+  var CUR_NAME = { VES: 'Bolívares (Bs)', DOP: 'Pesos dominicanos (RD$)', MXN: 'Pesos mexicanos (MX$)', USD: 'Dólares (USD)', USDT: 'USDT' };
+  var CTRY_OPTS = CTRY_KEYS.map(function (k) { return [k, CTRY[k]]; });
   var NEXT = {
     pending: ['awaiting_review', 'rejected'], awaiting_review: ['rejected'], paid: ['delivering', 'completed', 'refunded', 'disputed'],
     delivering: ['completed', 'refunded', 'disputed'], completed: ['refunded', 'disputed'], disputed: ['completed', 'refunded'], rejected: [], refunded: []
@@ -166,7 +171,7 @@
           var it = cfg.item(r, extra, rows);
           list.append(h('div', { class: 'arow' },
             h('div', { class: 'ainfo' }, h('b', { text: it.title }), h('small', { text: it.sub }), chips(it.chips || [])),
-            h('div', { class: 'aact' }, badge(it.badge), cfg.canWrite ? h('button', { class: 'btn ghost sm', text: 'Editar', onclick: function () { edit(r); } }) : null)));
+            h('div', { class: 'aact' }, badge(it.badge), cfg.actions ? cfg.actions(r, extra, function () { return manager(cfg); }) : null, cfg.canWrite ? h('button', { class: 'btn ghost sm', text: 'Editar', onclick: function () { edit(r); } }) : null)));
         });
       }
       var body = h('div', null, cfg.note ? h('p', { class: 'note', text: cfg.note }) : null, cfg.toolbar ? cfg.toolbar(extra, state, draw) : null, list);
@@ -203,27 +208,31 @@
     },
     products: {
       name: 'products', title: 'Precios y paquetes', desc: 'Diamantes, pases y recargas con su precio.', newTitle: 'Agregar paquete', editTitle: 'Editar paquete', empty: 'Aún no hay paquetes. Agrega el primero con “+ Nuevo”.',
-      extra: function () { return api('games'); },
-      toolbar: function (games, state, redraw) {
+      extra: function () { return Promise.all([api('games'), api('prices')]).then(function (r) { return { games: r[0], prices: r[1] }; }); },
+      toolbar: function (ex, state, redraw) {
         var s = h('select', { 'aria-label': 'Filtrar por juego', onchange: function () { state.game = s.value; redraw(); } },
-          gameOpts(games, 'Todos los juegos').map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+          gameOpts(ex.games, 'Todos los juegos').map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
         return h('div', { class: 'tools' }, s);
+      },
+      actions: function (r, ex, reload) {
+        if (!has('catalog.write')) return null;
+        return h('button', { class: 'btn sm', text: 'Precios por país', onclick: function () { pricesDialog(r, ex.prices, reload); } });
       },
       filter: function (r, state) { return !state.game || r.game_id === state.game; },
       newValues: function (state) { return state.game ? { game_id: state.game } : null; },
-      item: function (r) {
+      item: function (r, ex) {
         var margin = r.cost != null && r.cost_currency === 'USD' && Number(r.cost) > 0 ? 'Margen ' + usd(r.price_usd - r.cost) : null;
         return {
           title: r.name, sub: (r.games ? r.games.name : 'Juego') + ' · ' + r.sku,
-          chips: ['Precio ' + usd(r.price_usd), r.cost != null ? 'Costo ' + Number(r.cost) + ' ' + r.cost_currency : null, margin, ES.delivery[r.delivery_type] || r.delivery_type],
+          chips: [pricesChip(r, ex)].concat(['Venezuela ' + usd(r.price_usd), r.cost != null ? 'Costo ' + Number(r.cost) + ' ' + r.cost_currency : null, margin, ES.delivery[r.delivery_type] || r.delivery_type]),
           badge: ES.pub[r.status]
         };
       },
-      fields: function (row, games) {
+      fields: function (row, ex) {
         return [
-          { k: 'game_id', label: 'Juego', type: 'select', opts: gameOpts(games) },
+          { k: 'game_id', label: 'Juego', type: 'select', opts: gameOpts(ex.games) },
           { k: 'name', label: 'Nombre del paquete', max: 80, hint: 'Ej: 100 Diamantes' },
-          { k: 'price_usd', label: 'Precio de venta (USD)', type: 'number', step: '0.01' },
+          { k: 'price_usd', label: 'Precio en Venezuela (USD)', type: 'number', step: '0.01', hint: 'Los demás países se fijan con el botón “Precios por país”.' },
           { k: 'cost', label: 'Costo (lo que te cuesta)', type: 'number', step: '0.01', def: 0 },
           { k: 'cost_currency', label: 'Moneda del costo', type: 'select', opts: [['USD', 'USD'], ['VES', 'Bs (VES)'], ['USDT', 'USDT']], def: 'USD' },
           { k: 'delivery_type', label: 'Entrega', type: 'select', opts: [['manual', 'Manual (tú la haces)'], ['code', 'Códigos'], ['api', 'API del proveedor']], def: 'manual' },
@@ -235,15 +244,27 @@
     },
     paymethods: {
       name: 'paymethods', title: 'Métodos de pago', desc: 'Lo que ve el cliente al pagar: datos de tu cuenta y moneda.', newTitle: 'Agregar método', editTitle: 'Editar método', empty: 'Aún no hay métodos. Agrega el primero con “+ Nuevo”.',
-      note: null,
+      note: 'Cada país tiene sus propios métodos: el cliente solo ve los de su país.',
+      toolbar: function (ex, state, redraw) {
+        var box = h('div', { class: 'ctab', role: 'group', 'aria-label': 'Filtrar por país' });
+        [['', 'Todos']].concat(CTRY_OPTS).forEach(function (o) {
+          var b = h('button', { type: 'button', text: o[1], class: (state.country || '') === o[0] ? 'on' : '' });
+          b.addEventListener('click', function () { state.country = o[0]; Array.prototype.forEach.call(box.children, function (x) { x.classList.toggle('on', x === b); }); redraw(); });
+          box.append(b);
+        });
+        return box;
+      },
+      filter: function (r, state) { return !state.country || r.country === state.country; },
+      newValues: function (state) { return state.country ? { country: state.country, currency: CTRY_CUR[state.country] } : null; },
       item: function (r) {
-        return { title: r.name, sub: (ES.method[r.kind] || r.kind) + ' · cobra en ' + r.currency, chips: [Number(r.min_usd) > 0 ? 'Mínimo ' + usd(r.min_usd) : null, 'Orden ' + r.sort_order], badge: r.active ? ['Activo', 'ok'] : ['Oculto', 'wait'] };
+        return { title: r.name, sub: CTRY[r.country] + ' · ' + (ES.method[r.kind] || r.kind) + ' · cobra en ' + r.currency, chips: [Number(r.min_usd) > 0 ? 'Mínimo ' + usd(r.min_usd) : null, 'Orden ' + r.sort_order], badge: r.active ? ['Activo', 'ok'] : ['Oculto', 'wait'] };
       },
       fields: function () {
         return [
+          { k: 'country', label: 'País donde se usa este método', type: 'select', opts: CTRY_OPTS, def: 'VE' },
           { k: 'name', label: 'Nombre que ve el cliente', max: 60, hint: 'Ej: Pago móvil Banesco' },
           { k: 'kind', label: 'Tipo', type: 'select', opts: Object.keys(ES.method).map(function (k) { return [k, ES.method[k]]; }), def: 'pago_movil' },
-          { k: 'currency', label: 'Moneda en que paga el cliente', type: 'select', opts: [['VES', 'Bolívares (Bs)'], ['USD', 'Dólares (USD)'], ['USDT', 'USDT']], def: 'VES', hint: 'En bolívares el monto se calcula con la tasa guardada en el pedido.' },
+          { k: 'currency', label: 'Moneda en que paga el cliente', type: 'select', opts: [['VES', 'Bolívares (Bs)'], ['DOP', 'Pesos dominicanos (RD$)'], ['MXN', 'Pesos mexicanos (MX$)'], ['USD', 'Dólares (USD)'], ['USDT', 'USDT']], def: 'VES', hint: 'En moneda local el monto se calcula con la tasa guardada en el pedido (Resumen → Tasas).' },
           { k: 'instructions', label: 'Datos para pagar', max: 800, hint: 'Banco, teléfono, cédula, titular, correo, ID de Binance… lo que el cliente necesita.' },
           { k: 'min_usd', label: 'Pedido mínimo (USD)', type: 'number', step: '0.01', def: 0 },
           { k: 'sort_order', label: 'Orden', type: 'number', def: 100 },
@@ -321,6 +342,29 @@
     }
   };
 
+  // ---------- Precios por país ----------
+  function pricesChip(r, ex) {
+    var mine = (ex && ex.prices ? ex.prices : []).filter(function (x) { return x.product_id === r.id; });
+    if (!mine.length) return 'Sin precios por país';
+    return mine.map(function (x) { return x.country + ' ' + usd(x.price_usd); }).join(' · ');
+  }
+  function pricesDialog(prod, allPrices, reload) {
+    var cur = {};
+    allPrices.filter(function (x) { return x.product_id === prod.id; }).forEach(function (x) { cur[x.country] = Number(x.price_usd); });
+    var fields = CTRY_KEYS.map(function (k) {
+      return { k: k, label: CTRY[k] + ' (precio en USD)', type: 'number', step: '0.01', hint: k === 'VE' ? 'Se muestra en bolívares con la tasa del día.' : CTRY_CUR[k] === 'USD' ? 'Se cobra en dólares.' : 'Se muestra en ' + CTRY_CUR[k] + ' con la tasa del día.' };
+    });
+    form('Precios de ' + prod.name, fields, cur, function (data) {
+      var jobs = CTRY_KEYS.filter(function (k) {
+        var v = String(data[k] == null ? '' : data[k]).trim();
+        return v === '' ? cur[k] != null : Number(v) !== cur[k];
+      });
+      return jobs.reduce(function (p, k) {
+        return p.then(function () { return api('prices', { body: { product_id: prod.id, country: k, price_usd: data[k] } }); });
+      }, Promise.resolve()).then(function () { toast('Precios guardados'); return reload(); });
+    }, 'Guardar precios');
+  }
+
   // ---------- Resumen ----------
   function viewStats() {
     view.replaceChildren(h('p', { class: 'muted', text: 'Cargando…' }));
@@ -328,20 +372,23 @@
       var k = [
         ['Usuarios', s.users], ['Por atender', s.orders_pending], ['Pagados por entregar', s.orders_paid], ['Completados', s.orders_completed],
         ['Ingresos 30 días', usd(s.revenue_30d_usd)], ['Ingresos totales', usd(s.revenue_usd)], ['Juegos activos', s.games_active], ['Paquetes activos', s.products_active],
-        ['Tasa USD → Bs', s.rate ? Number(s.rate.rate).toLocaleString('es-VE', { maximumFractionDigits: 2 }) : 'Sin tasa']
+        ['USD → Bs', s.rates && s.rates.VES ? Number(s.rates.VES.rate).toLocaleString('es-VE', { maximumFractionDigits: 2 }) : 'Sin tasa'],
+        ['USD → RD$', s.rates && s.rates.DOP ? Number(s.rates.DOP.rate).toLocaleString('es-VE', { maximumFractionDigits: 2 }) : 'Sin tasa'],
+        ['USD → MX$', s.rates && s.rates.MXN ? Number(s.rates.MXN.rate).toLocaleString('es-VE', { maximumFractionDigits: 2 }) : 'Sin tasa']
       ];
       var body = h('div', null,
         h('div', { class: 'kpis' }, k.map(function (x) { return h('div', { class: 'kpi' }, h('b', { text: String(x[1]) }), h('span', { text: x[0] })); })),
         h('p', { class: 'muted small', text: 'Ingresos = pedidos pagados, en entrega o completados.' }));
       if (!s.products_active) body.append(h('p', { class: 'note', text: 'Todavía no hay paquetes activos, así que la tienda no muestra nada que comprar. Ve a “Precios” y activa tus paquetes.' }));
       if (has('rates.write')) {
-        var inp = h('input', { type: 'number', step: '0.01', min: '0', placeholder: 'Bs por 1 USD', 'aria-label': 'Tasa USD a Bs' });
+        var qsel = h('select', { 'aria-label': 'Moneda de la tasa' }, [['VES', 'Bolívares (Venezuela)'], ['DOP', 'Pesos dominicanos (R. Dominicana)'], ['MXN', 'Pesos mexicanos (México)']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+        var inp = h('input', { type: 'number', step: '0.01', min: '0', placeholder: 'Unidades por 1 USD', 'aria-label': 'Tasa por 1 USD' });
         var msg = h('p', { class: 'msg', role: 'status' });
-        body.append(h('div', { class: 'card' }, h('h2', { text: 'Tasa del día' }),
-          h('p', { text: 'Cada pedido guarda la tasa que había al crearse. Actualízala cuando cambie.' }), inp, msg,
+        body.append(h('div', { class: 'card' }, h('h2', { text: 'Tasas del día' }),
+          h('p', { text: 'Cada pedido guarda la tasa que había al crearse. Panamá y Estados Unidos pagan en dólares y no necesitan tasa.' }), qsel, inp, msg,
           h('button', { class: 'btn sm', text: 'Guardar tasa', onclick: function () {
             msg.textContent = '';
-            api('rate', { body: { rate: inp.value } }).then(function () { toast('Tasa guardada'); viewStats(); }).catch(function (e) { msg.textContent = e.message; });
+            api('rate', { body: { quote: qsel.value, rate: inp.value } }).then(function () { toast('Tasa guardada'); viewStats(); }).catch(function (e) { msg.textContent = e.message; });
           } })));
       }
       show('Resumen', 'Cómo va NEXORA.', null, body);
@@ -426,7 +473,7 @@
             h('div', { class: 'ainfo' },
               h('b', { text: (u.username || u.display_name || '(sin nombre)') + ' · ' + (ES.role[u.role] || u.role) }),
               h('small', { text: (u.email || 'sin correo') + ' · alta ' + when(u.created_at) }),
-              chips(['Saldo ' + usd(u.balance_usd), u.points + ' puntos', u.spins + ' giros'])),
+              chips([u.country ? CTRY[u.country] : 'Sin país', 'Saldo ' + usd(u.balance_usd), u.points + ' puntos', u.spins + ' giros'])),
             h('div', { class: 'aact' }, u.banned ? badge(['Suspendido', 'bad']) : null,
               h('button', { class: 'btn ghost sm', text: 'Gestionar', onclick: function () { manageUser(u, load); } }))));
         });
@@ -454,6 +501,13 @@
         dlg.append(h('label', null, 'Ajustar', kind), h('label', null, 'Cantidad', amt),
           h('button', { type: 'button', class: 'btn sm', text: 'Aplicar ajuste', onclick: function () {
             run({ action: 'adjust', kind: kind.value, amount: Number(amt.value) }, function (r) { u.balance_usd = r.balance_usd; u.points = r.points; u.spins = r.spins; amt.value = ''; });
+          } }));
+        var cs = h('select', null, [['', 'Sin país']].concat(CTRY_OPTS).map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+        cs.value = u.country || '';
+        dlg.append(h('label', null, 'País del cliente', cs),
+          h('button', { type: 'button', class: 'btn ghost sm', text: 'Guardar país', onclick: function () {
+            if (!cs.value) { msg.textContent = 'Elige un país.'; return; }
+            run({ action: 'country', country: cs.value }, function (r) { u.country = r.country; });
           } }));
         if (u.role !== 'owner' && u.id !== myId) {
           var ban = h('button', { type: 'button', class: 'btn ghost sm', text: u.banned ? 'Reactivar cuenta' : 'Suspender cuenta' });

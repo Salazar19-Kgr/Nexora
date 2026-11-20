@@ -3,7 +3,11 @@
   var slug = new URLSearchParams(location.search).get('g') || '';
   var data = null, sel = null, token = null, busy = false;
   function usd(n) { return '$' + Number(n).toFixed(2); }
-  function ves(n, r) { return r ? 'Bs ' + (Number(n) * r).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''; }
+  var SYM = { VES: 'Bs ', DOP: 'RD$ ', MXN: 'MX$ ' };
+  function ves(n, r) { return r ? (SYM[data && data.currency] || 'Bs ') + (Number(n) * r).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ''; }
+  var NAMES = {}; (window.NXCountries || []).forEach(function (c) { NAMES[c[0]] = c[1]; });
+  function guestCountry() { try { return localStorage.getItem('nx_country') || ''; } catch (e) { return ''; } }
+  function setGuestCountry(v) { try { localStorage.setItem('nx_country', v); } catch (e) {} }
   function say(t, ok) { var m = $('#msg'); m.textContent = t || ''; m.className = 'msg' + (ok ? ' ok' : ''); }
 
   NX.ready.then(function (o) { token = o.session ? o.session.access_token : null; });
@@ -11,14 +15,20 @@
   function fail(t) { $('#gname').textContent = 'Juego no disponible'; say(t); }
   if (!/^[a-z0-9-]{2,40}$/.test(slug)) { fail('Elige un juego desde la lista.'); return; }
 
-  NXApi('/api/games/' + slug).then(function (d) {
+  NX.ready.then(function (o) {
+    token = o.session ? o.session.access_token : null;
+    var gc = guestCountry();
+    return NXApi('/api/games/' + slug + (!token && gc ? '?country=' + encodeURIComponent(gc) : ''), null, token);
+  }).then(function (d) {
     data = d; var g = d.game;
+    drawCountry(d);
     document.title = g.name + ' · NEXORA';
     $('#gname').textContent = g.name; $('#gcat').textContent = g.category || '';
     $('#glogo').replaceChildren(NXArt.logo(g, 'big'));
     $('#server_row').hidden = !(g.required_fields || []).includes('server');
     var list = $('#plist'); list.replaceChildren();
-    if (!d.products.length) { var e = document.createElement('div'); e.className = 'empty'; e.textContent = 'Este juego aún no tiene paquetes disponibles.'; list.append(e); return; }
+    if (!d.country) { var e0 = document.createElement('div'); e0.className = 'empty'; e0.textContent = 'Elige tu país para ver los precios.'; list.append(e0); return; }
+    if (!d.products.length) { var e = document.createElement('div'); e.className = 'empty'; e.textContent = 'Este juego aún no tiene paquetes disponibles en tu país.'; list.append(e); return; }
     d.products.forEach(function (p) {
       var b = document.createElement('button'); b.type = 'button'; b.className = 'prow'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', 'false');
       var info = document.createElement('div'); info.className = 'pi';
@@ -31,6 +41,23 @@
       list.append(b);
     });
   }).catch(function (e) { fail(e.status === 404 ? 'Este juego no existe o no está disponible.' : 'No se pudo cargar el juego. Intenta de nuevo.'); });
+
+  function drawCountry(d) {
+    var box = $('#cbar'); box.replaceChildren();
+    var lab = document.createElement('label'); lab.textContent = d.locked ? 'Precios para: ' : 'Tu país: ';
+    if (d.locked) {
+      var chip = document.createElement('span'); chip.className = 'cflag'; chip.textContent = NAMES[d.country] || d.country; lab.append(chip);
+    } else {
+      var sel = document.createElement('select'); sel.setAttribute('aria-label', 'País');
+      var f = document.createElement('option'); f.value = ''; f.textContent = 'Selecciona tu país…'; sel.append(f);
+      (window.NXCountries || []).forEach(function (c) { var op = document.createElement('option'); op.value = c[0]; op.textContent = c[1]; sel.append(op); });
+      sel.value = d.country || '';
+      sel.addEventListener('change', function () { if (sel.value) { setGuestCountry(sel.value); location.reload(); } });
+      lab.append(sel);
+    }
+    box.append(lab);
+    if (d.locked && !d.country) { var m = document.createElement('p'); m.className = 'muted'; m.textContent = 'Recarga la página para elegir tu país.'; box.append(m); }
+  }
 
   function choose(p, el) {
     sel = p;
