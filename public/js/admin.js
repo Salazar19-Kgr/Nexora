@@ -12,7 +12,7 @@
     pub: { draft: ['Borrador', 'wait'], active: ['Activo', 'ok'], paused: ['Pausado', 'bad'] },
     delivery: { manual: 'Manual', code: 'Códigos', api: 'API del proveedor' },
     method: { pago_movil: 'Pago móvil', transferencia: 'Transferencia', zelle: 'Zelle', binance: 'Binance Pay', usdt: 'USDT', efectivo: 'Efectivo', otro: 'Otro' },
-    prize: { none: 'Sin premio', balance: 'Saldo', points: 'Puntos', spins: 'Giros' }
+    prize: { none: 'Sin premio', balance: 'Saldo', points: 'Puntos', spins: 'Giros', coins: 'NexoCoins' }
   };
   var CTRY = { VE: 'Venezuela', DO: 'República Dominicana', PA: 'Panamá', MX: 'México', US: 'Estados Unidos' };
   var CTRY_KEYS = ['VE', 'DO', 'PA', 'MX', 'US'];
@@ -303,7 +303,7 @@
       item: function (r) {
         var expired = r.expires_at && new Date(r.expires_at) < new Date();
         var out = r.max_uses && r.used_count >= r.max_uses;
-        var prize = r.reward_type === 'balance' ? '+' + usd(r.reward_value) + ' de saldo' : r.reward_type === 'points' ? '+' + Number(r.reward_value) + ' puntos' : '+' + Number(r.reward_value) + ' giros de ruleta';
+        var prize = r.reward_type === 'balance' ? '+' + usd(r.reward_value) + ' de saldo' : r.reward_type === 'coins' ? '+' + Number(r.reward_value) + ' NexoCoins' : r.reward_type === 'points' ? '+' + Number(r.reward_value) + ' puntos' : '+' + Number(r.reward_value) + ' giros de ruleta';
         return {
           title: r.code, sub: prize,
           chips: ['Usos ' + r.used_count + '/' + (r.max_uses || '∞'), r.expires_at ? 'Vence ' + when(r.expires_at) : 'Sin vencimiento'],
@@ -313,7 +313,7 @@
       fields: function (row) {
         return [
           { k: 'code', label: 'Código', max: 32, upper: true, disabled: !!row, gen: true },
-          { k: 'reward_type', label: 'Qué regala', type: 'select', opts: [['balance', 'Saldo en USD'], ['points', 'Puntos'], ['spins', 'Giros de ruleta']], def: 'balance' },
+          { k: 'reward_type', label: 'Qué regala', type: 'select', opts: [['balance', 'Saldo en USD'], ['coins', 'NexoCoins (mini descuento)'], ['points', 'Puntos'], ['spins', 'Giros de ruleta']], def: 'balance' },
           { k: 'reward_value', label: 'Cantidad', type: 'number', step: '0.01', hint: 'Puntos y giros deben ser números enteros.' },
           { k: 'max_uses', label: 'Usos máximos (vacío = sin límite)', type: 'number' },
           { k: 'expires_at', label: 'Vence (opcional)', type: 'datetime-local' },
@@ -323,17 +323,17 @@
     },
     prizes: {
       name: 'prizes', title: 'Ruleta', desc: 'Premios de la ruleta que ven los usuarios en su cuenta.', newTitle: 'Agregar premio', editTitle: 'Editar premio', empty: 'La ruleta aún no tiene premios.',
-      note: 'Los usuarios consiguen giros con códigos de canje (premio “Giros”) o con un ajuste manual en Usuarios. La probabilidad de cada premio es su peso dividido entre la suma de pesos activos.',
+      note: 'Los NexoCoins se convierten en mini descuento al comprar (1 moneda = $0.01, hasta el 25 % del pedido). Los usuarios consiguen giros con códigos de canje (premio “Giros”) o con un ajuste manual en Usuarios. La probabilidad de cada premio es su peso dividido entre la suma de pesos activos.',
       item: function (r, extra, rows) {
         var total = rows.reduce(function (s, x) { return s + (x.active ? x.weight : 0); }, 0);
         var pct = r.active && total ? Math.round(r.weight * 1000 / total) / 10 : 0;
-        var what = r.prize_type === 'none' ? 'Sin premio' : r.prize_type === 'balance' ? '+' + usd(r.value) + ' de saldo' : r.prize_type === 'points' ? '+' + Number(r.value) + ' puntos' : '+' + Number(r.value) + ' giros';
+        var what = r.prize_type === 'none' ? 'Sin premio' : r.prize_type === 'balance' ? '+' + usd(r.value) + ' de saldo' : r.prize_type === 'coins' ? '+' + Number(r.value) + ' NexoCoins' : r.prize_type === 'points' ? '+' + Number(r.value) + ' puntos' : '+' + Number(r.value) + ' giros';
         return { title: r.label, sub: what, chips: ['Peso ' + r.weight, 'Probabilidad ' + pct + '%'], badge: r.active ? ['Activo', 'ok'] : ['Pausado', 'wait'] };
       },
       fields: function () {
         return [
           { k: 'label', label: 'Nombre del premio', max: 40, hint: 'Ej: $1 de saldo, 50 puntos, Otra vez' },
-          { k: 'prize_type', label: 'Tipo', type: 'select', opts: [['none', 'Sin premio'], ['balance', 'Saldo en USD'], ['points', 'Puntos'], ['spins', 'Giros extra']], def: 'points' },
+          { k: 'prize_type', label: 'Tipo', type: 'select', opts: [['none', 'Sin premio'], ['coins', 'NexoCoins (mini descuento)'], ['balance', 'Saldo en USD'], ['points', 'Puntos'], ['spins', 'Giros extra']], def: 'coins' },
           { k: 'value', label: 'Cantidad', type: 'number', step: '0.01', def: 0 },
           { k: 'weight', label: 'Peso (probabilidad)', type: 'number', hint: 'Más alto = más probable. Ej: 70 común, 5 raro.' },
           { k: 'active', label: 'Activo', type: 'checkbox', def: true }
@@ -473,7 +473,7 @@
             h('div', { class: 'ainfo' },
               h('b', { text: (u.username || u.display_name || '(sin nombre)') + ' · ' + (ES.role[u.role] || u.role) }),
               h('small', { text: (u.email || 'sin correo') + ' · alta ' + when(u.created_at) }),
-              chips([u.country ? CTRY[u.country] : 'Sin país', 'Saldo ' + usd(u.balance_usd), u.points + ' puntos', u.spins + ' giros'])),
+              chips([u.country ? CTRY[u.country] : 'Sin país', 'Saldo ' + usd(u.balance_usd), (u.coins || 0) + ' NexoCoins', u.points + ' puntos', u.spins + ' giros'])),
             h('div', { class: 'aact' }, u.banned ? badge(['Suspendido', 'bad']) : null,
               h('button', { class: 'btn ghost sm', text: 'Gestionar', onclick: function () { manageUser(u, load); } }))));
         });
@@ -488,7 +488,7 @@
     openDialog(function (dlg, close) {
       var msg = h('p', { class: 'msg', role: 'status' });
       var info = h('p', { class: 'muted' });
-      function setInfo() { info.textContent = 'Saldo ' + usd(u.balance_usd) + ' · ' + u.points + ' puntos · ' + u.spins + ' giros · ' + (u.banned ? 'SUSPENDIDO' : 'Activa'); }
+      function setInfo() { info.textContent = 'Saldo ' + usd(u.balance_usd) + ' · ' + (u.coins || 0) + ' NexoCoins · ' + u.points + ' puntos · ' + u.spins + ' giros · ' + (u.banned ? 'SUSPENDIDO' : 'Activa'); }
       setInfo();
       function run(body, ok) {
         msg.textContent = '';
@@ -496,11 +496,11 @@
       }
       dlg.append(h('h2', { text: u.username || u.display_name || 'Usuario' }), h('p', { class: 'muted', text: u.email || '' }), info);
       if (has('users.grant')) {
-        var kind = h('select', null, [['balance', 'Saldo (USD)'], ['points', 'Puntos'], ['spins', 'Giros de ruleta']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+        var kind = h('select', null, [['balance', 'Saldo (USD)'], ['coins', 'NexoCoins'], ['points', 'Puntos'], ['spins', 'Giros de ruleta']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
         var amt = h('input', { type: 'number', step: '0.01', placeholder: 'Ej: 5 (negativo para restar)' });
         dlg.append(h('label', null, 'Ajustar', kind), h('label', null, 'Cantidad', amt),
           h('button', { type: 'button', class: 'btn sm', text: 'Aplicar ajuste', onclick: function () {
-            run({ action: 'adjust', kind: kind.value, amount: Number(amt.value) }, function (r) { u.balance_usd = r.balance_usd; u.points = r.points; u.spins = r.spins; amt.value = ''; });
+            run({ action: 'adjust', kind: kind.value, amount: Number(amt.value) }, function (r) { u.balance_usd = r.balance_usd; u.points = r.points; u.spins = r.spins; u.coins = r.coins; amt.value = ''; });
           } }));
         var cs = h('select', null, [['', 'Sin país']].concat(CTRY_OPTS).map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
         cs.value = u.country || '';
@@ -608,8 +608,16 @@
 
   function route() {
     var id = (location.hash || '').slice(1);
-    var s = allowed.filter(function (x) { return x.id === id; })[0] || allowed[0];
+    var s = allowed.filter(function (x) { return x.id === id; })[0];
+    // Teléfono: sin sección elegida se muestra solo el menú en lista. Pantalla grande: abre Resumen.
+    if (!s && allowed.length && window.matchMedia && window.matchMedia('(max-width:859px)').matches) {
+      document.body.classList.add('adm-home'); document.body.classList.remove('adm-sec');
+      Array.prototype.forEach.call(nav.children, function (a) { a.classList.remove('on'); });
+      view.replaceChildren(); window.scrollTo(0, 0); return;
+    }
+    s = s || allowed[0];
     if (!s) { view.replaceChildren(h('div', { class: 'empty', text: 'Tu rol no tiene secciones disponibles.' })); return; }
+    document.body.classList.remove('adm-home'); document.body.classList.add('adm-sec');
     Array.prototype.forEach.call(nav.children, function (a) { a.classList.toggle('on', a.dataset.id === s.id); });
     s.go();
   }
@@ -622,6 +630,8 @@
       nav.append(a);
     });
     window.addEventListener('hashchange', route);
+    var bk = document.getElementById('aback');
+    if (bk) bk.addEventListener('click', function () { location.hash = ''; });
     route();
   }
 

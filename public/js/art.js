@@ -34,9 +34,11 @@
   function sprite() {
     var s = '<svg xmlns="' + NS + '" width="0" height="0" style="position:absolute" aria-hidden="true"><defs>' +
       '<linearGradient id="mg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d7e3dc"/></linearGradient>' +
+      '<linearGradient id="cg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c9ffd6"/><stop offset=".45" stop-color="#16D94A"/><stop offset="1" stop-color="#0a8f2e"/></linearGradient>' +
       '<linearGradient id="gem1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d9fbff"/><stop offset=".5" stop-color="#3fd0ff"/><stop offset="1" stop-color="#1668e8"/></linearGradient>' +
       '<linearGradient id="gem2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".9"/><stop offset="1" stop-color="#7be3ff" stop-opacity=".2"/></linearGradient></defs>';
     for (var k in M) s += '<symbol id="m-' + k + '" viewBox="0 0 64 64"><g fill="url(#mg)">' + M[k] + '</g></symbol>';
+    s += '<symbol id="m-coin" viewBox="0 0 64 64"><circle cx="32" cy="35" r="26" fill="#06461c"/><circle cx="32" cy="30" r="26" fill="url(#cg)" stroke="#d9ffe4" stroke-width="1.6"/><circle cx="32" cy="30" r="19" fill="none" stroke="#06461c" stroke-width="2.4" opacity=".55"/><polygon points="22,42 22,18 28,18 37,31 37,18 42,18 42,42 36,42 27,29 27,42" fill="#eafff0" stroke="#06461c" stroke-width="1.2" stroke-linejoin="round"/></symbol>';
     s += '<symbol id="m-gem" viewBox="0 0 64 64"><polygon points="18,8 46,8 60,24 32,58 4,24" fill="url(#gem1)" stroke="#e9fbff" stroke-width="1.5" stroke-linejoin="round"/>' +
       '<polygon points="18,8 26,24 4,24" fill="url(#gem2)"/><polygon points="46,8 38,24 60,24" fill="#1668e8" opacity=".45"/><polygon points="26,24 38,24 32,58" fill="#0b4fc7" opacity=".4"/><polygon points="18,8 46,8 38,24 26,24" fill="#fff" opacity=".35"/></symbol>';
     var I = {
@@ -75,10 +77,11 @@
     } else d.appendChild(svgUse('m-' + p.m, 'mo'));
     return d;
   }
+  function coin(cls) { return svgUse('m-coin', cls || 'coin'); }
   function gem(cls) { return svgUse('m-gem', cls || 'gem'); }
   function icon(id, cls) { var s = svgUse('i-' + id, cls || 'ic'); return s; }
   var MI = { pago_movil: 'phone', transferencia: 'bank', zelle: 'bank', binance: 'coin', usdt: 'coin', efectivo: 'cash', otro: 'coin' };
   function methodIcon(kind) { return icon(MI[kind] || 'coin', 'ic'); }
 
-  window.NXArt = { logo: logo, gem: gem, icon: icon, methodIcon: methodIcon, pick: pick, hue: function (g) { return pick(g).h; } };
+  window.NXArt = { logo: logo, gem: gem, coin: coin, icon: icon, methodIcon: methodIcon, pick: pick, hue: function (g) { return pick(g).h; } };
 })();

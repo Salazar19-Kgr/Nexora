@@ -10,7 +10,8 @@
   function setGuestCountry(v) { try { localStorage.setItem('nx_country', v); } catch (e) {} }
   function say(t, ok) { var m = $('#msg'); m.textContent = t || ''; m.className = 'msg' + (ok ? ' ok' : ''); }
 
-  NX.ready.then(function (o) { token = o.session ? o.session.access_token : null; });
+  var coins = 0;
+  NX.ready.then(function (o) { token = o.session ? o.session.access_token : null; if (token) NXApi('/api/me', null, token).then(function (m) { coins = Number(m.coins) || 0; refreshCoins(); }).catch(function () {}); });
 
   function fail(t) { $('#gname').textContent = 'Juego no disponible'; say(t); }
   if (!/^[a-z0-9-]{2,40}$/.test(slug)) { fail('Elige un juego desde la lista.'); return; }
@@ -59,11 +60,23 @@
     if (d.locked && !d.country) { var m = document.createElement('p'); m.className = 'muted'; m.textContent = 'Recarga la página para elegir tu país.'; box.append(m); }
   }
 
+  // NexoCoins: 1 moneda = $0.01, hasta el 25 % del precio (el servidor lo recalcula).
+  function coinMax() { return sel && coins ? Math.min(coins, Math.floor(Number(sel.price_usd) * 25)) : 0; }
+  function refreshCoins() {
+    var row = $('#coinrow'); if (!row) return;
+    row.hidden = !(coins > 0 && sel);
+    if (!sel) return;
+    if (coins > 0) $('#coinhint').textContent = '(tienes ' + coins + ' · usarías ' + coinMax() + ' = −' + usd(coinMax() / 100) + ')';
+    var tot = Math.max(Number(sel.price_usd) - ($('#usecoins').checked ? coinMax() / 100 : 0), 0);
+    $('#total').textContent = usd(tot); $('#totves').textContent = data && data.rate ? '≈ ' + ves(tot, data.rate) : '';
+  }
+  $('#usecoins').addEventListener('change', refreshCoins);
+
   function choose(p, el) {
     sel = p;
     Array.prototype.forEach.call(document.querySelectorAll('.prow'), function (x) { x.classList.toggle('on', x === el); x.setAttribute('aria-checked', x === el ? 'true' : 'false'); });
     var first = $('#step2').hidden; $('#step2').hidden = false; $('#buybar').hidden = false;
-    $('#total').textContent = usd(p.price_usd); $('#totves').textContent = data.rate ? '≈ ' + ves(p.price_usd, data.rate) : '';
+    refreshCoins();
     say('');
     if (first) setTimeout(function () { $('#step2').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
   }
@@ -82,7 +95,7 @@
       busy = true; $('#buy').disabled = true; say('Creando tu pedido…', true);
       NXApi('/api/orders', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ product_id: sel.id, coupon: $('#coupon').value.trim(), player: { player_id: pid, server: srv } })
+        body: JSON.stringify({ product_id: sel.id, coupon: $('#coupon').value.trim(), use_coins: $('#usecoins').checked, player: { player_id: pid, server: srv } })
       }, token).then(function (r) { location.href = '/pago?o=' + encodeURIComponent(r.order_id); })
         .catch(function (e) { busy = false; $('#buy').disabled = false; say(e.message); });
     });

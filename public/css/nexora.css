@@ -352,11 +352,45 @@ body.isadmin .adm{padding-top:16px}
 .cbar select{padding:10px 12px;border-radius:12px;background:#050907;color:inherit;border:1px solid var(--line2,#1c4a2c);font:inherit}
 /* ---- Sin deslizar: las opciones de la cuenta se ven todas, en cuadrícula ---- */
 @media(max-width:859px){
-  .side nav{display:grid;grid-template-columns:1fr 1fr;gap:8px;overflow:visible}
-  .side nav a,.side nav button{white-space:normal;border:1px solid var(--line2);background:rgba(5,9,7,.5);padding:13px 12px;font-size:.92rem}
-  .side nav a.on{border-color:var(--acc)}
-  .side nav button{grid-column:1/-1;justify-content:center;color:#ff8a8a}
 }
 /* Menú del panel admin: todas las secciones visibles, sin deslizar */
-.anav{flex-wrap:wrap;overflow:visible}
 .ctab{flex-wrap:wrap;overflow:visible}
+
+/* ---- Menús en lista vertical (una opción debajo de otra, con flecha) ---- */
+.side nav,.anav{display:flex;flex-direction:column;gap:0;overflow:visible;padding:0;margin:0 0 12px;border:1px solid var(--line2);border-radius:16px;background:rgba(5,9,7,.55)}
+.side nav a,.side nav button,.anav a{display:flex;align-items:center;gap:14px;width:100%;padding:16px 16px;border:0;border-radius:0;border-bottom:1px solid var(--line2);background:none;font-size:1rem;font-weight:600;color:var(--tx);white-space:normal;text-align:left}
+.side nav>*:last-child,.anav a:last-child{border-bottom:0}
+.side nav a .ic,.side nav button .ic,.anav a .ic{width:22px;height:22px;color:var(--acc);flex:none}
+.side nav a::after,.anav a::after{content:"";margin-left:auto;width:9px;height:9px;border-right:2px solid var(--tx2);border-top:2px solid var(--tx2);transform:rotate(45deg);flex:none}
+.side nav a.on,.anav a.on{background:rgba(22,217,74,.1);color:var(--hi);border-color:var(--line2)}
+.side nav button{color:#ff8a8a}.side nav button .ic{color:#ff8a8a}
+.aback{display:none;align-items:center;gap:6px;margin:0 0 12px;padding:10px 14px;border-radius:12px;border:1px solid var(--line2);background:var(--card);color:var(--hi);font:inherit;font-weight:700;cursor:pointer}
+@media(max-width:859px){
+  body.adm-sec .aback{display:inline-flex}
+  body.adm-sec .anav{display:none}
+  body.adm-home #aview{display:none}
+}
+@media(min-width:860px){
+  .adm{display:grid;grid-template-columns:260px minmax(0,1fr);gap:20px;align-items:start;max-width:1200px}
+  .anav{position:sticky;top:12px;margin:0}
+}
+/* NexoCoins y ruleta */
+.stats.five{grid-template-columns:repeat(2,1fr)}
+.stats.five .stat:last-child{grid-column:1/-1}
+@media(min-width:700px){.stats.five{grid-template-columns:repeat(5,1fr)}.stats.five .stat:last-child{grid-column:auto}}
+.stat .ic,.stat svg{vertical-align:-4px}
+svg.coin,svg.pa:not(.ic){width:34px;height:34px}
+.wh{margin:18px 0 8px;font-size:.95rem;color:var(--tx2)}
+.wprobs{display:grid;gap:8px}
+.prow2{display:grid;grid-template-columns:92px 1fr 48px;align-items:center;gap:10px;font-size:.88rem}
+.prow2 i{height:8px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.prow2 i b{display:block;height:100%;border-radius:99px;background:currentColor}
+.prow2 em{font-style:normal;text-align:right;color:var(--tx2)}
+.t-common{color:#9fb3a8}.t-unc{color:#3fd0ff}.t-epic{color:#b57bff}.t-leg{color:#ffc84a}.t-none{color:#6b7a72}
+.prow2 span{color:var(--tx)}
+.rwgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(min-width:560px){.rwgrid{grid-template-columns:repeat(3,1fr)}}
+.rcard{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 8px;border-radius:14px;border:1px solid currentColor;background:rgba(5,9,7,.6);text-align:center}
+.rcard b{color:var(--tx);font-size:.9rem}.rcard small{font-size:.75rem}
+.rcard .ra svg.ic{width:30px;height:30px}
+#coinrow{display:flex;align-items:center;gap:10px;margin:6px 0 12px}#coinrow[hidden]{display:none!important}

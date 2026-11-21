@@ -24,7 +24,44 @@
   function paint(p) {
     if (p.balance_usd != null) $('#bal').textContent = usd(p.balance_usd);
     if (p.points != null) $('#pts').textContent = String(p.points);
+    if (p.coins != null && $('#coins')) $('#coins').textContent = String(p.coins);
     if (p.spins != null) { spins = p.spins; $('#spn').textContent = String(p.spins); updateBtn(); }
+  }
+  // Probabilidades y posibles recompensas por rareza
+  function tier(p) {
+    if (p.prize_type === 'none') return ['Sin premio', 'none'];
+    if (p.pct >= 30) return ['Común', 'common'];
+    if (p.pct >= 10) return ['Poco común', 'unc'];
+    if (p.pct >= 3) return ['Épico', 'epic'];
+    return ['Legendario', 'leg'];
+  }
+  function prizeArt(p) {
+    if (p.prize_type === 'coins') return NXArt.coin('pa');
+    if (p.prize_type === 'balance') return NXArt.icon('wallet', 'pa ic');
+    if (p.prize_type === 'points') return NXArt.icon('star', 'pa ic');
+    if (p.prize_type === 'spins') return NXArt.icon('bolt', 'pa ic');
+    return NXArt.icon('shield', 'pa ic');
+  }
+  function drawOdds() {
+    var pb = $('#wprobs'), gr = $('#rwgrid'); if (!pb || !gr) return;
+    pb.replaceChildren(); gr.replaceChildren();
+    var by = {};
+    prizes.forEach(function (p) { var t = tier(p); by[t[1]] = by[t[1]] || { name: t[0], pct: 0 }; by[t[1]].pct += Number(p.pct) || 0; });
+    ['common', 'unc', 'epic', 'leg', 'none'].forEach(function (k) {
+      if (!by[k]) return;
+      var row = document.createElement('div'); row.className = 'prow2 t-' + k;
+      var n = document.createElement('span'); n.textContent = by[k].name;
+      var bar = document.createElement('i'), fill = document.createElement('b'); fill.style.width = Math.min(100, by[k].pct) + '%'; bar.append(fill);
+      var v = document.createElement('em'); v.textContent = (Math.round(by[k].pct * 10) / 10) + '%';
+      row.append(n, bar, v); pb.append(row);
+    });
+    prizes.forEach(function (p) {
+      var t = tier(p), c = document.createElement('div'); c.className = 'rcard t-' + t[1];
+      var a = document.createElement('div'); a.className = 'ra'; a.append(prizeArt(p));
+      var l = document.createElement('b'); l.textContent = p.label;
+      var s = document.createElement('small'); s.textContent = t[0];
+      c.append(a, l, s); gr.append(c);
+    });
   }
   function updateBtn() {
     var b = $('#spinbtn');
@@ -85,9 +122,10 @@
         if (pz.prize_type === 'none') txt = pz.label;
         else if (pz.prize_type === 'balance') txt = '¡Ganaste ' + usd(pz.value) + ' de saldo!';
         else if (pz.prize_type === 'points') txt = '¡Ganaste ' + Number(pz.value) + ' puntos!';
+        else if (pz.prize_type === 'coins') txt = '¡Ganaste ' + Number(pz.value) + ' NexoCoins! Se usan como descuento al comprar.';
         else txt = '¡Ganaste ' + Number(pz.value) + ' giros extra!';
         $('#pmsg2').textContent = txt;
-        busy = false; paint({ spins: r.spins, balance_usd: r.balance_usd, points: r.points });
+        busy = false; paint({ spins: r.spins, balance_usd: r.balance_usd, points: r.points, coins: r.coins });
       }, reduce ? 50 : 4700);
     }).catch(function (e) {
       busy = false; $('#pmsg2').textContent = e.message; updateBtn();
@@ -103,7 +141,7 @@
     b.disabled = true; say('');
     call('/api/redeem', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code: code }) }).then(function (r) {
       var v = Number(r.reward_value);
-      say(r.reward_type === 'balance' ? '¡Listo! Sumaste ' + usd(v) + ' de saldo.' : r.reward_type === 'points' ? '¡Listo! Sumaste ' + v + ' puntos.' : '¡Listo! Sumaste ' + v + ' giros de ruleta.', true);
+      say(r.reward_type === 'balance' ? '¡Listo! Sumaste ' + usd(v) + ' de saldo.' : r.reward_type === 'coins' ? '¡Listo! Sumaste ' + v + ' NexoCoins.' : r.reward_type === 'points' ? '¡Listo! Sumaste ' + v + ' puntos.' : '¡Listo! Sumaste ' + v + ' giros de ruleta.', true);
       $('#rcode').value = '';
       return call('/api/me').then(paint);
     }).catch(function (err) { say(err.message); }).then(function () { b.disabled = false; });
@@ -115,7 +153,7 @@
     token = o.session.access_token;
     call('/api/me').then(paint).catch(function () {});
     fetch('/api/wheel', { headers: auth() }).then(function (r) { return r.ok ? r.json() : { prizes: [], spins: 0 }; }).then(function (w) {
-      prizes = w.prizes || []; spins = w.spins || 0; drawWheel(); paint({ spins: spins });
+      prizes = w.prizes || []; spins = w.spins || 0; drawWheel(); paint({ spins: spins }); drawOdds();
     }).catch(function () { drawWheel(); });
   });
 })();

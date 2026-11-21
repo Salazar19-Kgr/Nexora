@@ -68,6 +68,7 @@ const PG_MSG = {
   producto_no_disponible: [404, "Producto no disponible."],
   cupon_invalido: [400, "Cupón inválido, vencido o sin usos."],
   cupon_usado: [409, "Ya usaste este cupón."],
+  coins_insuficientes: [409, "No tienes suficientes NexoCoins."],
   codigo_invalido: [400, "Código inválido o vencido."],
   codigo_ya_usado: [409, "Ya canjeaste este código."],
   sin_giros: [409, "No tienes giros disponibles."],
@@ -163,6 +164,7 @@ async function createOrder(env, request) {
     p_product: uuidOrFail(input.product_id),
     p_player: { player_id: playerId, server: String(input.player.server || "").trim().slice(0, 64) },
     p_coupon: coupon,
+    p_use_coins: input.use_coins === true,
   });
   return json(r);
 }
@@ -264,14 +266,14 @@ async function botPayment(env, request) {
 
 // ---------- Cuenta del usuario: perfil, canje y ruleta ----------
 async function myProfile(env, id) {
-  const rows = await sb(env, `profiles?id=eq.${id}&select=username,balance_usd,points,spins,banned,country`, { service: true });
-  return rows[0] || { username: null, balance_usd: 0, points: 0, spins: 0, banned: false, country: null };
+  const rows = await sb(env, `profiles?id=eq.${id}&select=username,balance_usd,points,spins,coins,banned,country`, { service: true });
+  return rows[0] || { username: null, balance_usd: 0, points: 0, spins: 0, coins: 0, banned: false, country: null };
 }
 
 async function me(env, request) {
   const user = await needUser(env, request);
   const p = await myProfile(env, user.id);
-  return json({ username: p.username, balance_usd: p.balance_usd, points: p.points, spins: p.spins, country: p.country });
+  return json({ username: p.username, balance_usd: p.balance_usd, points: p.points, spins: p.spins, coins: p.coins, country: p.country });
 }
 
 // El país se elige una sola vez (el cliente no puede cambiarlo después; lo cambia un administrador).
@@ -294,7 +296,9 @@ async function redeem(env, request) {
 }
 
 async function wheelInfo(env, request) {
-  const prizes = await sb(env, "wheel_prizes?active=eq.true&select=id,label,prize_type&order=created_at.asc,id.asc", { service: true });
+  const rows = await sb(env, "wheel_prizes?active=eq.true&select=id,label,prize_type,value,weight&order=created_at.asc,id.asc", { service: true });
+  const total = rows.reduce((t, x) => t + Number(x.weight), 0);
+  const prizes = rows.map((x) => ({ id: x.id, label: x.label, prize_type: x.prize_type, value: Number(x.value), pct: total ? Math.round((Number(x.weight) * 1000) / total) / 10 : 0 }));
   const user = await userFromToken(env, request);
   const spins = user ? (await myProfile(env, user.id)).spins : 0;
   return json({ prizes, spins });
@@ -304,7 +308,7 @@ async function spin(env, request) {
   const user = await needUser(env, request);
   const prize = await rpc(env, "spin_wheel", { p_user: user.id });
   const p = await myProfile(env, user.id);
-  return json({ prize, spins: p.spins, balance_usd: p.balance_usd, points: p.points });
+  return json({ prize, spins: p.spins, balance_usd: p.balance_usd, points: p.points, coins: p.coins });
 }
 
 // ---------- Inicio de sesión con correo O usuario ----------
@@ -508,26 +512,26 @@ const RES = {
     table: "redeem_codes", read: "codes.write", write: "codes.write", order: "created_at.desc", select: "*",
     spec: {
       code: { t: "text", label: "Código", req: true, upper: true, once: true, max: 32, re: /^[A-Z0-9_-]{3,32}$/ },
-      reward_type: { t: "enum", label: "Premio", list: ["balance", "points", "spins"], req: true },
+      reward_type: { t: "enum", label: "Premio", list: ["balance", "points", "spins", "coins"], req: true },
       reward_value: { t: "num", label: "Cantidad", req: true, min: 0.01, max: 100000 },
       max_uses: { t: "num", label: "Usos máximos", int: true, min: 1, max: 10000000 },
       expires_at: { t: "ts", label: "Vence" },
       active: { t: "bool", label: "Activo", def: true },
     },
-    check(o) { if (o.reward_type !== "balance" && !Number.isInteger(o.reward_value)) throw bad("Puntos y giros deben ser números enteros."); },
+    check(o) { if (o.reward_type !== "balance" && !Number.isInteger(o.reward_value)) throw bad("Puntos, giros y NexoCoins deben ser números enteros."); },
   },
   prizes: {
     table: "wheel_prizes", read: "wheel.write", write: "wheel.write", order: "created_at.asc", select: "*",
     spec: {
       label: { t: "text", label: "Nombre del premio", req: true, max: 40 },
-      prize_type: { t: "enum", label: "Tipo", list: ["none", "balance", "points", "spins"], req: true },
+      prize_type: { t: "enum", label: "Tipo", list: ["none", "balance", "points", "spins", "coins"], req: true },
       value: { t: "num", label: "Cantidad", min: 0, max: 100000, def: 0 },
       weight: { t: "num", label: "Peso (probabilidad)", int: true, req: true, min: 1, max: 1000 },
       active: { t: "bool", label: "Activo", def: true },
     },
     check(o) {
       if (o.prize_type !== "none" && !(o.value > 0)) throw bad("Este premio necesita una cantidad mayor que 0.");
-      if ((o.prize_type === "points" || o.prize_type === "spins") && !Number.isInteger(o.value)) throw bad("Puntos y giros deben ser enteros.");
+      if ((o.prize_type === "points" || o.prize_type === "spins" || o.prize_type === "coins") && !Number.isInteger(o.value)) throw bad("Puntos, giros y NexoCoins deben ser enteros.");
     },
   },
 };
@@ -606,7 +610,7 @@ async function usersList(env, ctx, url) {
   need(ctx, "users.read");
   const q = (url.searchParams.get("q") || "").trim().toLowerCase().slice(0, 60);
   const [profiles, auth] = await Promise.all([
-    sb(env, "profiles?select=id,username,display_name,role,balance_usd,points,spins,banned,country,created_at&order=created_at.desc&limit=200", { service: true }),
+    sb(env, "profiles?select=id,username,display_name,role,balance_usd,points,spins,coins,banned,country,created_at&order=created_at.desc&limit=200", { service: true }),
     fetch(`${env.SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=200`, { headers: authHeaders(env.SUPABASE_SERVICE_ROLE_KEY) })
       .then((r) => (r.ok ? r.json() : { users: [] })).catch(() => ({ users: [] })),
   ]);
@@ -625,7 +629,7 @@ async function isCeo(env, id) {
 
 async function userAction(env, ctx, id, body) {
   id = uuidOrFail(id);
-  const cur = await sb(env, `profiles?id=eq.${id}&select=id,role,banned,balance_usd,points,spins,username`, { service: true });
+  const cur = await sb(env, `profiles?id=eq.${id}&select=id,role,banned,balance_usd,points,spins,coins,username`, { service: true });
   if (!cur.length) throw bad("Usuario no encontrado.", 404);
   const target = cur[0];
   const action = String(body.action || "");
@@ -660,13 +664,13 @@ async function userAction(env, ctx, id, body) {
   if (action === "adjust") {
     need(ctx, "users.grant");
     const kind = String(body.kind || "");
-    if (!["balance", "points", "spins"].includes(kind)) throw bad("Tipo no válido.");
+    if (!["balance", "points", "spins", "coins"].includes(kind)) throw bad("Tipo no válido.");
     const amount = Number(body.amount);
     if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 100000) throw bad("Escribe una cantidad válida (distinta de 0).");
     if (kind !== "balance" && !Number.isInteger(amount)) throw bad("Puntos y giros deben ser enteros.");
     const after = await rpc(env, "admin_adjust", { p_user: id, p_kind: kind, p_amount: amount });
     await audit(env, ctx.user.id, "user.adjust", "profiles", id,
-      { balance_usd: target.balance_usd, points: target.points, spins: target.spins }, { ...after, ajuste: { kind, amount } });
+      { balance_usd: target.balance_usd, points: target.points, spins: target.spins, coins: target.coins }, { ...after, ajuste: { kind, amount } });
     return json(after);
   }
   throw bad("Acción no válida.");
