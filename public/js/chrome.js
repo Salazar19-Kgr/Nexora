@@ -57,6 +57,7 @@
     '<details><summary>Métodos de pago</summary><p>Los métodos disponibles se muestran al pagar tu pedido: pago móvil, transferencia, Zelle, USDT y más.</p></details>' +
     '<h3 class="sig">Síguenos</h3>' +
     '<div class="social"><a href="' + WA + '" target="_blank" rel="noopener" aria-label="WhatsApp">' + ic('chat') + '</a><a href="mailto:prds33735435@gmail.com" aria-label="Correo">' + ic('mail') + '</a></div>' +
+    '<p class="legalrow"><a href="/terminos">Términos</a> · <a href="/privacidad">Privacidad</a> · <a href="/reembolsos">Reembolsos</a></p>' +
     '<p class="copy">© 2026 Nexora Ecosistem de AI. Todos los derechos reservados.</p>' +
     '<p class="small">NEXORA no es afiliada oficial de los juegos mostrados.</p></div></footer>';
 

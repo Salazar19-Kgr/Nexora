@@ -313,6 +313,7 @@ async function spin(env, request) {
 
 // ---------- Inicio de sesión con correo O usuario ----------
 async function login(env, request) {
+  limit(`login:${clientIp(request)}`, 12, 60000);
   const input = await request.json().catch(() => null);
   const ident = String((input && input.identifier) || "").trim().slice(0, 120);
   const password = String((input && input.password) || "").slice(0, 200);
@@ -471,6 +472,7 @@ const RES = {
       cost_currency: { t: "enum", label: "Moneda del costo", list: ["USD", "VES", "USDT"], def: "USD" },
       price_usd: { t: "num", label: "Precio en USD", req: true, min: 0, max: 100000 },
       delivery_type: { t: "enum", label: "Entrega", list: ["manual", "code", "api"], def: "manual" },
+      provider_offer_id: { t: "num", label: "ID de oferta GamesDrop", int: true, min: 1, max: 999999999 },
       status: { t: "enum", label: "Estado", list: ST, def: "draft" },
     },
     async beforeCreate(env, out) {
@@ -829,6 +831,10 @@ async function admin(env, request, url) {
     return json({ role: ctx.role, username: ctx.username, perms: ctx.perms.includes("*") ? ALL_PERMS : ctx.perms });
   }
   if (a === "stats" && m === "GET") return stats(env, ctx);
+  if (a === "provider" && !b && m === "GET") return providerInfo(env, ctx);
+  if (a === "provider" && b === "offers" && m === "POST") return providerOffers(env, ctx, await readBody(request));
+  if (a === "deliveries" && !b && m === "GET") return deliveriesList(env, ctx, url);
+  if (a === "deliveries" && b && c && m === "POST") return deliveryAction(env, ctx, b, c);
   if (a === "audit" && m === "GET") return auditList(env, ctx);
   if (a === "users" && !b && m === "GET") return usersList(env, ctx, url);
   if (a === "users" && b && m === "POST") return userAction(env, ctx, b, await readBody(request));
@@ -943,12 +949,214 @@ async function health(env) {
   out.admin_con_clave_secreta = await probe("coupons?select=id&limit=1", true);
   out.pagos_con_clave_secreta = await probe("payment_methods?select=id&limit=1", true);
   out.bot_configurado = !!env.BOT_SECRET;
+  out.proveedor_configurado = gdConfigured(env);
+  out.proveedor_en_vivo = gdLive(env);
+  out.entregas_con_clave_secreta = await probe("fulfillments?select=id&limit=1", true);
   out.ceo_listo = setupEnabled(env);
   return json(out);
 }
 
+// ======================================================================
+//  PROVEEDOR DE RECARGAS (GamesDrop) y entrega automática
+//  Secretos en Cloudflare: GAMESDROP_TOKEN. PROVIDER_LIVE=1 activa las compras reales
+//  (sin eso, los pedidos quedan en "manual" y nunca se gasta saldo del proveedor).
+// ======================================================================
+const gdConfigured = (env) => !!env.GAMESDROP_TOKEN;
+const gdLive = (env) => gdConfigured(env) && String(env.PROVIDER_LIVE || "") === "1";
+
+class GdError extends Error {
+  constructor(code, message, retry) { super(message || code); this.code = code; this.retry = !!retry; }
+}
+
+async function gd(env, path, body, method = "POST") {
+  if (!gdConfigured(env)) throw new GdError("SIN_TOKEN", "Falta GAMESDROP_TOKEN", false);
+  const base = String(env.GAMESDROP_URL || "https://partner.gamesdrop.io").replace(/\/+$/, "");
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
+  let res, j;
+  try {
+    res = await fetch(`${base}/api/v1/${path}`, {
+      method,
+      headers: { authorization: env.GAMESDROP_TOKEN, "content-type": "application/json" },
+      body: method === "GET" ? undefined : JSON.stringify(body || {}),
+      signal: ctl.signal,
+    });
+    j = await res.json().catch(() => null);
+  } catch (e) {
+    throw new GdError("RED", "Sin respuesta del proveedor", true);
+  } finally { clearTimeout(timer); }
+  const err = j && j.error;
+  if (!res.ok || err) {
+    const code = String((err && (err.code || err)) || `HTTP_${res.status}`).toUpperCase();
+    const msg = (err && err.message) || code;
+    throw new GdError(code, String(msg).slice(0, 200), res.status >= 500 || code === "SERVICE_UNAVAILABLE");
+  }
+  return j || {};
+}
+
+const firstRow = (r) => (r && Array.isArray(r.rows) && r.rows[0]) || (r && r.data) || r || {};
+
+async function providerInfo(env, ctx) {
+  need(ctx, "stats");
+  const out = { configured: gdConfigured(env), live: gdLive(env), balance: null, currency: null, min_balance: Number(env.PROVIDER_MIN_BALANCE) || 20, low: false, error: null };
+  if (!out.configured) return json(out);
+  try {
+    const b = await gd(env, "offers/balance", null, "GET");
+    out.balance = b.balance == null ? null : Number(b.balance);
+    out.currency = b.currency || null;
+    out.low = out.balance != null && out.balance < out.min_balance;
+  } catch (e) { out.error = e.code || "error"; }
+  return json(out);
+}
+
+async function providerOffers(env, ctx, body) {
+  need(ctx, "catalog.write");
+  const search = String((body && body.search) || "").trim().slice(0, 60);
+  if (search.length < 2) throw bad("Escribe al menos 2 letras para buscar.");
+  if (!gdConfigured(env)) throw bad("El proveedor aún no está configurado (falta GAMESDROP_TOKEN en Cloudflare).", 409);
+  let r;
+  try { r = await gd(env, "offers/sync", { search, limit: 20, page: 1 }); }
+  catch (e) { throw bad(`El proveedor respondió: ${e.code}`, 502); }
+  const rows = Array.isArray(r.rows) ? r.rows : [];
+  return json(rows.slice(0, 20).map((o) => ({
+    offer_id: Number(o.offerGroupId), name: String(o.offerGroupName || o.productName || "").slice(0, 120),
+    product: String(o.productName || "").slice(0, 80), price: Number(o.price), currency: o.currency || null,
+    in_stock: o.inStock !== false, needs_server: !!o.isRequiredGameServerId,
+  })).filter((o) => Number.isFinite(o.offer_id)));
+}
+
+// Verificación opcional del ID de jugador (solo informativa: el proveedor puede fallar sin que el ID sea malo).
+async function checkPlayer(env, request) {
+  const user = await needUser(env, request);
+  limit(`chk:${user.id}`, 12, 60000);
+  if (!gdLive(env)) return json({ status: "unavailable" });
+  const b = await readBody(request);
+  const pid = String(b.player_id || "").trim().slice(0, 64);
+  if (!pid) throw bad("Escribe el ID del jugador.");
+  const rows = await sb(env, `products?id=eq.${uuidOrFail(b.product_id)}&status=eq.active&select=provider_offer_id,delivery_type`, { service: true });
+  if (!rows.length || rows[0].delivery_type !== "api" || !rows[0].provider_offer_id) return json({ status: "unavailable" });
+  const req = { offerId: Number(rows[0].provider_offer_id), gameUserId: pid };
+  const srv = String(b.server || "").trim().slice(0, 64);
+  if (srv) req.gameServerId = srv;
+  try {
+    const r = await gd(env, "offers/check-game-data", req);
+    if (r.status === "VALID") return json({ status: "valid", nickname: r.gameUserLogin ? String(r.gameUserLogin).slice(0, 60) : null });
+    return json({ status: "invalid", message: String(r.message || "").slice(0, 120) || null });
+  } catch (e) { return json({ status: "unavailable" }); }
+}
+
+const GD_OK = ["COMPLETED", "DELIVERED"];
+const GD_FAIL = ["CANCELED", "CANCELLED", "FAILED", "REFUND", "REFUNDED"];
+const RETRY_SECS = [60, 120, 300, 900, 1800];
+
+async function fset(env, id, status, o = {}) {
+  await rpc(env, "fulfillment_set", {
+    p_id: id, p_status: status, p_provider_order: o.order || null, p_provider_status: o.pstatus || null,
+    p_cost: o.cost == null ? null : o.cost, p_currency: o.cur || null, p_error: o.error || null, p_retry_in: o.retry || 0,
+  });
+}
+
+// Un paso de la entrega: consulta el estado si ya se envió; si no, cotiza, valida y compra.
+async function stepFulfillment(env, f) {
+  const orders = await sb(env, `orders?id=eq.${f.order_id}&select=id,amount_usd,status,player_details,products(delivery_type,provider_offer_id)`, { service: true });
+  const o = orders[0];
+  if (!o || !["delivering", "paid"].includes(o.status)) return; // el pedido ya fue resuelto por otra vía
+  const prod = o.products || {};
+  const offerId = Number(f.offer_id || prod.provider_offer_id);
+  const auto = prod.delivery_type === "api" && Number.isFinite(offerId) && offerId > 0;
+  if (!auto) return fset(env, f.id, "manual", { error: "sin_oferta_del_proveedor" });
+  if (!gdLive(env) && !f.provider_order_id) return fset(env, f.id, "manual", { error: gdConfigured(env) ? "modo_prueba" : "proveedor_sin_configurar" });
+
+  try {
+    // 1) Si ya hay (o pudo haber) una compra, solo se consulta; nunca se compra de nuevo con otro id.
+    let st = null;
+    if (f.provider_order_id || f.attempts > 0 || f.status === "submitted") {
+      try { st = await gd(env, "offers/order-status", { transactionId: f.transaction_id }); }
+      catch (e) { if (f.provider_order_id) throw e; /* no existe todavía: se compra abajo */ }
+    }
+    if (!st) {
+      const q = firstRow(await gd(env, "offers/find-one", { offerId, quantity: 1 }));
+      const price = Number(q.price);
+      if (!Number.isFinite(price) || price <= 0) return fset(env, f.id, "manual", { error: "precio_proveedor_invalido" });
+      if (q.inStock === false) return fset(env, f.id, "manual", { error: "sin_stock" });
+      if (!["USD", "USDT"].includes(String(q.currency || "USD").toUpperCase())) return fset(env, f.id, "manual", { error: "moneda_proveedor_no_usd" });
+      if (price > Number(o.amount_usd)) return fset(env, f.id, "manual", { error: "costo_mayor_al_precio", cost: price, cur: q.currency || "USD" });
+      const pd = o.player_details || {};
+      const customer = { gameUserId: String(pd.player_id || "") };
+      if (pd.server) customer.gameServerId = String(pd.server);
+      const body = { offerId, price, quantity: 1, transactionId: f.transaction_id, customer };
+      if (q.productOfferId != null) body.productOfferId = q.productOfferId;
+      try { st = await gd(env, "offers/create-order", body); }
+      catch (e) {
+        if (e.code !== "TRANSACTION_DUPLICATE") throw e;
+        st = await gd(env, "offers/order-status", { transactionId: f.transaction_id });
+      }
+      await fset(env, f.id, "submitted", { order: st.orderId != null ? String(st.orderId) : null, pstatus: st.status || "SUBMITTED", cost: price, cur: String(q.currency || "USD").toUpperCase(), retry: 30 });
+    }
+    const s = String(st.status || "").toUpperCase();
+    const pid = st.orderId != null ? String(st.orderId) : null;
+    if (GD_OK.includes(s)) return fset(env, f.id, "completed", { order: pid, pstatus: s });
+    if (GD_FAIL.includes(s)) return fset(env, f.id, "failed", { order: pid, pstatus: s, error: String(st.failureReason || st.failureCode || s).slice(0, 200) });
+    return fset(env, f.id, "submitted", { order: pid, pstatus: s || "PROCESSING", retry: 30 });
+  } catch (e) {
+    const code = e instanceof GdError ? e.code : "ERROR";
+    const retryable = e instanceof GdError ? (e.retry || code === "WRONG_PRICE") : true;
+    if (!retryable || f.attempts + 1 >= RETRY_SECS.length) return fset(env, f.id, "failed", { error: code });
+    return fset(env, f.id, "queued", { error: code, retry: RETRY_SECS[Math.min(f.attempts, RETRY_SECS.length - 1)] });
+  }
+}
+
+let delivering = false;
+async function processFulfillments(env) {
+  if (delivering) return { skipped: true };
+  delivering = true;
+  try {
+    await rpc(env, "claim_deliveries", { p_limit: 10 });
+    const rows = await sb(env, `fulfillments?status=in.(queued,submitted)&next_try_at=lte.${encodeURIComponent(new Date().toISOString())}&order=created_at.asc&limit=10&select=*`, { service: true });
+    for (const f of rows) {
+      try { await stepFulfillment(env, f); } catch (e) { /* se reintenta en el próximo ciclo */ }
+    }
+    return { processed: rows.length };
+  } finally { delivering = false; }
+}
+
+async function deliveriesList(env, ctx, url) {
+  need(ctx, "orders.read");
+  const st = url.searchParams.get("status");
+  let f = "";
+  if (st === "attention") f = "&status=in.(failed,manual,queued)";
+  else if (st) { if (!["queued", "submitted", "completed", "failed", "manual"].includes(st)) throw bad("Estado no válido."); f = `&status=eq.${st}`; }
+  const rows = await sb(env,
+    `fulfillments?select=${encodeURIComponent("id,order_id,status,provider_status,provider_order_id,cost,cost_currency,attempts,last_error,created_at,updated_at,orders(amount_usd,player_details,country,products(name,games(name)))")}&order=created_at.desc&limit=100${f}`,
+    { service: true });
+  return json(rows);
+}
+
+async function deliveryAction(env, ctx, id, action) {
+  need(ctx, "orders.write");
+  id = uuidOrFail(id);
+  if (action === "retry") await rpc(env, "fulfillment_retry", { p_id: id });
+  else if (action === "done") await rpc(env, "fulfillment_manual_done", { p_id: id });
+  else throw bad("Acción no válida.");
+  await audit(env, ctx.user.id, `delivery.${action}`, "fulfillments", id, null, null);
+  return json({ ok: true });
+}
+
+// Límite de intentos por proceso (suficiente contra abuso básico; Supabase Auth limita además por su cuenta).
+const hits = new Map();
+function limit(key, max, windowMs) {
+  const now = Date.now();
+  if (hits.size > 5000) for (const [k, v] of hits) if (v.t < now) hits.delete(k);
+  const h = hits.get(key);
+  if (!h || h.t < now) { hits.set(key, { n: 1, t: now + windowMs }); return; }
+  if (++h.n > max) throw bad("Demasiados intentos. Espera un momento e inténtalo de nuevo.", 429);
+}
+const kick = (ectx, env) => { const p = processFulfillments(env).catch(() => {}); if (ectx && ectx.waitUntil) ectx.waitUntil(p); };
+const clientIp = (request) => request.headers.get("cf-connecting-ip") || "x";
+
 export default {
-  async fetch(request, env) {
+  async scheduled(event, env, ectx) { kick(ectx, env); },
+  async fetch(request, env, ectx) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
     try {
@@ -963,8 +1171,9 @@ export default {
       if (gp && m === "GET") return await gamePage(env, request, url, gp[1]);
       if (p === "/api/orders" && m === "POST") return await createOrder(env, request);
       if (p === "/api/payment-methods" && m === "GET") return await paymentMethods(env, request);
-      if (p === "/api/verify-player/status" && m === "GET") return json({ available: false });
-      if (p === "/api/bot/payments" && m === "POST") return await botPayment(env, request);
+      if (p === "/api/verify-player/status" && m === "GET") return json({ available: gdLive(env) });
+      if (p === "/api/check-id" && m === "POST") return await checkPlayer(env, request);
+      if (p === "/api/bot/payments" && m === "POST") { const r = await botPayment(env, request); if (r.ok) kick(ectx, env); return r; }
       const op = p.match(/^\/api\/orders\/([0-9a-f-]{36})(\/proof)?$/i);
       if (op && !op[2] && m === "GET") return await myOrder(env, request, op[1]);
       if (op && op[2] && m === "POST") return await submitProof(env, request, op[1]);
@@ -978,7 +1187,11 @@ export default {
       if (p === "/api/redeem" && m === "POST") return await redeem(env, request);
       if (p === "/api/wheel" && m === "GET") return await wheelInfo(env, request);
       if (p === "/api/spin" && m === "POST") return await spin(env, request);
-      if (p.startsWith("/api/admin")) return await admin(env, request, url);
+      if (p.startsWith("/api/admin")) {
+        const r = await admin(env, request, url);
+        if (m === "POST" && /^\/api\/admin\/(orders\/[^/]+\/payment|proofs\/[^/]+\/review)$/.test(p) && r.ok) kick(ectx, env);
+        return r;
+      }
       return json({ error: "No encontrado" }, 404);
     } catch (e) {
       if (e instanceof HttpError) return json({ error: e.message }, e.status);

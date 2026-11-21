@@ -216,7 +216,9 @@
       },
       actions: function (r, ex, reload) {
         if (!has('catalog.write')) return null;
-        return h('button', { class: 'btn sm', text: 'Precios por país', onclick: function () { pricesDialog(r, ex.prices, reload); } });
+        return h('div', { class: 'aact wrap2' },
+          h('button', { class: 'btn sm', text: 'Precios por país', onclick: function () { pricesDialog(r, ex.prices, reload); } }),
+          has('catalog.write') ? h('button', { class: 'btn ghost sm', text: 'Buscar en GamesDrop', onclick: function () { offersDialog(r, reload); } }) : null);
       },
       filter: function (r, state) { return !state.game || r.game_id === state.game; },
       newValues: function (state) { return state.game ? { game_id: state.game } : null; },
@@ -224,7 +226,7 @@
         var margin = r.cost != null && r.cost_currency === 'USD' && Number(r.cost) > 0 ? 'Margen ' + usd(r.price_usd - r.cost) : null;
         return {
           title: r.name, sub: (r.games ? r.games.name : 'Juego') + ' · ' + r.sku,
-          chips: [pricesChip(r, ex)].concat(['Venezuela ' + usd(r.price_usd), r.cost != null ? 'Costo ' + Number(r.cost) + ' ' + r.cost_currency : null, margin, ES.delivery[r.delivery_type] || r.delivery_type]),
+          chips: [pricesChip(r, ex)].concat(['Venezuela ' + usd(r.price_usd), r.cost != null ? 'Costo ' + Number(r.cost) + ' ' + r.cost_currency : null, margin, ES.delivery[r.delivery_type] || r.delivery_type, r.provider_offer_id ? 'GamesDrop #' + r.provider_offer_id : null]),
           badge: ES.pub[r.status]
         };
       },
@@ -238,7 +240,8 @@
           { k: 'delivery_type', label: 'Entrega', type: 'select', opts: [['manual', 'Manual (tú la haces)'], ['code', 'Códigos'], ['api', 'API del proveedor']], def: 'manual' },
           { k: 'status', label: 'Estado', type: 'select', opts: PUB_OPTS, def: 'draft', hint: 'Actívalo cuando tengas con qué entregarlo.' },
           { k: 'sku', label: 'SKU', max: 60, upper: true, disabled: !!row, hint: row ? '' : 'Déjalo vacío y se genera solo.' },
-          { k: 'external_sku', label: 'SKU del proveedor (opcional)', max: 80 }
+          { k: 'external_sku', label: 'SKU del proveedor (opcional)', max: 80 },
+          { k: 'provider_offer_id', label: 'ID de oferta en GamesDrop', type: 'number', step: '1', hint: 'Para entrega automática: pon “API del proveedor” arriba y aquí el ID. Mejor usa el botón “Buscar en GamesDrop” de la tarjeta.' }
         ];
       }
     },
@@ -342,6 +345,105 @@
     }
   };
 
+  // ---------- GamesDrop: buscar la oferta de un paquete ----------
+  function offersDialog(prod, reload) {
+    openDialog(function (dlg, close) {
+      var q = h('input', { type: 'search', placeholder: 'Ej: Free Fire 100 diamantes', 'aria-label': 'Buscar en GamesDrop', autocomplete: 'off' });
+      var out = h('div', { class: 'alist' });
+      var msg = h('p', { class: 'msg', role: 'status' });
+      function search() {
+        msg.textContent = ''; out.replaceChildren(h('p', { class: 'muted', text: 'Buscando…' }));
+        api('provider/offers', { body: { search: q.value } }).then(function (rows) {
+          out.replaceChildren();
+          if (!rows.length) out.append(h('div', { class: 'empty', text: 'Sin resultados. Prueba con otras palabras.' }));
+          rows.forEach(function (o) {
+            out.append(h('div', { class: 'arow' },
+              h('div', { class: 'ainfo' }, h('b', { text: o.name || o.product }), chips([o.price + ' ' + (o.currency || ''), o.in_stock ? 'Con stock' : 'Sin stock', o.needs_server ? 'Pide servidor' : null, '#' + o.offer_id])),
+              h('button', { type: 'button', class: 'btn sm', text: 'Usar', onclick: function () {
+                var body = { provider_offer_id: o.offer_id, delivery_type: 'api' };
+                api('products/' + prod.id, { body: body }).then(function () { toast('Oferta asignada'); close(); reload(); }).catch(function (e) { msg.textContent = e.message; });
+              } })));
+          });
+        }).catch(function (e) { out.replaceChildren(); msg.textContent = e.message; });
+      }
+      dlg.append(h('h2', { text: 'GamesDrop · ' + prod.name }),
+        h('p', { class: 'muted', text: 'Busca la oferta y toca “Usar”. El paquete pasa a entrega automática. El precio de GamesDrop es tu costo; revisa que sea menor que tu precio de venta.' }),
+        q, h('button', { type: 'button', class: 'btn sm', text: 'Buscar', onclick: search }), msg, out,
+        h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn ghost', text: 'Cerrar', onclick: close })));
+      q.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); search(); } });
+    });
+  }
+
+  // ---------- Entregas ----------
+  var DSTATUS = { queued: ['En cola', 'wait'], submitted: ['En proceso', 'wait'], completed: ['Entregado', 'ok'], failed: ['Falló', 'bad'], manual: ['Entrega manual', 'wait'] };
+  var DERR = {
+    modo_prueba: 'El modo real está apagado (PROVIDER_LIVE). Entrégalo a mano o actívalo y reintenta.',
+    proveedor_sin_configurar: 'Falta el token de GamesDrop en Cloudflare.',
+    sin_oferta_del_proveedor: 'Este paquete no tiene oferta de GamesDrop asignada.',
+    costo_mayor_al_precio: 'El costo del proveedor es mayor que lo que pagó el cliente. No se compró.',
+    sin_stock: 'El proveedor no tiene stock ahora.',
+    moneda_proveedor_no_usd: 'El proveedor cotiza en una moneda que no es USD.',
+    precio_proveedor_invalido: 'El proveedor devolvió un precio inválido.',
+    INVALID_TOKEN: 'El token de GamesDrop no es válido.', PERMISSION_DENIED: 'El token no tiene permiso para comprar.',
+    OFFER_NOT_FOUND: 'La oferta ya no existe o no tiene stock.', RED: 'GamesDrop no respondió. Se reintenta solo.', SERVICE_UNAVAILABLE: 'GamesDrop no está disponible. Se reintenta solo.'
+  };
+  function viewDeliveries() {
+    view.replaceChildren(h('p', { class: 'muted', text: 'Cargando…' }));
+    var state = { status: 'attention' };
+    var list = h('div', { class: 'alist' });
+    var fil = h('div', { class: 'fchips', role: 'group', 'aria-label': 'Filtrar entregas' });
+    function load() {
+      list.replaceChildren(h('p', { class: 'muted', text: 'Cargando…' }));
+      Array.prototype.forEach.call(fil.children, function (b) { b.classList.toggle('on', b.dataset.s === state.status); });
+      api('deliveries' + (state.status ? '?status=' + state.status : '')).then(function (rows) {
+        list.replaceChildren();
+        if (!rows.length) list.append(h('div', { class: 'empty', text: state.status === 'attention' ? 'Todo en orden: no hay entregas que atender.' : 'No hay entregas en esta vista.' }));
+        rows.forEach(function (f) { list.append(deliveryCard(f, load)); });
+      }).catch(fail);
+    }
+    [['attention', 'Por atender'], ['submitted', 'En proceso'], ['completed', 'Entregadas'], ['', 'Todas']].forEach(function (o) {
+      fil.append(h('button', { type: 'button', 'data-s': o[0], text: o[1], onclick: function () { state.status = o[0]; load(); } }));
+    });
+    show('Entregas', 'Recargas automáticas con GamesDrop. Aquí atiendes las que no salieron solas.', null, h('div', null, fil, list));
+    load();
+  }
+  function deliveryCard(f, reload) {
+    var o = f.orders || {}, p = o.products || {}, g = p.games || {}, pd = o.player_details || {};
+    var st = DSTATUS[f.status] || [f.status, 'wait'];
+    var lines = [h('small', { text: 'Jugador: ' + (pd.player_id || '—') + (pd.server ? ' · Servidor ' + pd.server : '') + ' · Cobrado ' + usd(o.amount_usd) + (f.cost != null ? ' · Costo ' + Number(f.cost) + ' ' + (f.cost_currency || '') : '') })];
+    if (f.provider_status) lines.push(h('small', { text: 'Proveedor: ' + f.provider_status + (f.provider_order_id ? ' · #' + f.provider_order_id : '') }));
+    if (f.last_error) lines.push(h('small', { class: 'pay', text: DERR[f.last_error] || ('Motivo: ' + f.last_error) }));
+    var acts = h('div', { class: 'aact wrap2' });
+    if (has('orders.write')) {
+      if (['failed', 'manual'].indexOf(f.status) >= 0 && !f.provider_order_id) acts.append(h('button', { class: 'btn sm', text: 'Reintentar', onclick: function () { act(f, 'retry', reload); } }));
+      if (['failed', 'manual', 'queued'].indexOf(f.status) >= 0) acts.append(h('button', { class: 'btn ghost sm', text: 'Ya lo entregué a mano', onclick: function () {
+        if (confirm('¿Confirmas que ya recargaste este pedido por fuera? Se marcará como completado.')) act(f, 'done', reload);
+      } }));
+    }
+    return h('div', { class: 'arow col' },
+      h('div', { class: 'otop' }, h('div', { class: 'ainfo' }, h('b', { text: '#' + short(f.order_id) + ' · ' + (g.name || 'Juego') + ' · ' + (p.name || 'Paquete') }), h('small', { text: when(f.created_at) + ' · intentos ' + f.attempts })), badge(st)),
+      h('div', { class: 'olines' }, lines), acts.children.length ? acts : null);
+  }
+  function act(f, a, reload) { api('deliveries/' + f.id + '/' + a, { body: {} }).then(function () { toast('Listo'); reload(); }).catch(function (e) { toast(e.message, true); }); }
+
+  // ---------- Proveedor en el Resumen ----------
+  function providerCard() {
+    var box = h('div', { class: 'card' }, h('h2', { text: 'Proveedor de recargas (GamesDrop)' }), h('p', { class: 'muted', text: 'Consultando…' }));
+    api('provider').then(function (r) {
+      var rows = [];
+      if (!r.configured) rows.push(h('p', { class: 'note', text: 'Sin conectar. Agrega GAMESDROP_TOKEN en Cloudflare para activar la entrega automática; mientras tanto todo se entrega a mano.' }));
+      else {
+        rows.push(h('p', null, 'Modo: ', h('b', { text: r.live ? 'REAL (gasta saldo)' : 'PRUEBA (no gasta saldo)' })));
+        if (r.error) rows.push(h('p', { class: 'note', text: 'No pude leer el saldo (' + r.error + '). Revisa el token.' }));
+        else rows.push(h('p', null, 'Saldo disponible: ', h('b', { text: (r.balance == null ? '—' : r.balance) + ' ' + (r.currency || '') })));
+        if (r.low) rows.push(h('p', { class: 'note', text: 'Saldo bajo (menos de ' + r.min_balance + '). Recarga tu cuenta de GamesDrop para no dejar pedidos sin entregar.' }));
+        if (!r.live) rows.push(h('p', { class: 'muted small', text: 'Para activar compras reales: PROVIDER_LIVE = 1 en Cloudflare, solo después de probar con la oferta 999 de pruebas.' }));
+      }
+      box.replaceChildren.apply(box, [h('h2', { text: 'Proveedor de recargas (GamesDrop)' })].concat(rows));
+    }).catch(function () { box.replaceChildren(h('h2', { text: 'Proveedor de recargas (GamesDrop)' }), h('p', { class: 'muted', text: 'No disponible ahora.' })); });
+    return box;
+  }
+
   // ---------- Precios por país ----------
   function pricesChip(r, ex) {
     var mine = (ex && ex.prices ? ex.prices : []).filter(function (x) { return x.product_id === r.id; });
@@ -379,6 +481,7 @@
       var body = h('div', null,
         h('div', { class: 'kpis' }, k.map(function (x) { return h('div', { class: 'kpi' }, h('b', { text: String(x[1]) }), h('span', { text: x[0] })); })),
         h('p', { class: 'muted small', text: 'Ingresos = pedidos pagados, en entrega o completados.' }));
+      body.append(providerCard());
       if (!s.products_active) body.append(h('p', { class: 'note', text: 'Todavía no hay paquetes activos, así que la tienda no muestra nada que comprar. Ve a “Precios” y activa tus paquetes.' }));
       if (has('rates.write')) {
         var qsel = h('select', { 'aria-label': 'Moneda de la tasa' }, [['VES', 'Bolívares (Venezuela)'], ['DOP', 'Pesos dominicanos (R. Dominicana)'], ['MXN', 'Pesos mexicanos (México)']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
@@ -453,7 +556,7 @@
       { k: 'method', label: 'Método de pago', type: 'select', opts: Object.keys(ES.method).map(function (k) { return [k, ES.method[k]]; }), def: 'pago_movil' },
       { k: 'reference', label: 'Referencia del pago', max: 64, upper: true, hint: 'Una misma referencia no puede pagar dos pedidos.' },
       { k: 'amount', label: 'Monto recibido', type: 'number', step: '0.01', def: Number(o.amount_usd), hint: hint },
-      { k: 'currency', label: 'Moneda recibida', type: 'select', opts: [['USD', 'USD'], ['VES', 'Bs (VES)'], ['USDT', 'USDT']], def: 'USD' }
+      { k: 'currency', label: 'Moneda recibida', type: 'select', opts: [['USD', 'USD'], ['VES', 'Bs (VES)'], ['DOP', 'RD$ (DOP)'], ['MXN', 'MX$ (MXN)'], ['USDT', 'USDT']], def: 'USD' }
     ], null, function (data) {
       return api('orders/' + o.id + '/payment', { body: data }).then(function () { toast('Pago confirmado'); reload(); });
     }, 'Confirmar pago');
@@ -594,6 +697,7 @@
   var SECTIONS = [
     { id: 'resumen', label: 'Resumen', icon: 'panel', perm: 'stats', go: viewStats },
     { id: 'pedidos', label: 'Pedidos', icon: 'list', perm: 'orders.read', go: viewOrders },
+    { id: 'entregas', label: 'Entregas', icon: 'bolt', perm: 'orders.read', go: viewDeliveries },
     { id: 'usuarios', label: 'Usuarios', icon: 'user', perm: 'users.read', go: viewUsers },
     { id: 'juegos', label: 'Juegos', icon: 'gamepad', perm: 'catalog.read', go: function () { CFG.games.canWrite = has('catalog.write'); return manager(CFG.games); } },
     { id: 'precios', label: 'Precios', icon: 'wallet', perm: 'catalog.read', go: function () { CFG.products.canWrite = has('catalog.write'); return manager(CFG.products); } },

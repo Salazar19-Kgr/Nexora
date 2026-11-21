@@ -394,3 +394,14 @@ svg.coin,svg.pa:not(.ic){width:34px;height:34px}
 .rcard b{color:var(--tx);font-size:.9rem}.rcard small{font-size:.75rem}
 .rcard .ra svg.ic{width:30px;height:30px}
 #coinrow{display:flex;align-items:center;gap:10px;margin:6px 0 12px}#coinrow[hidden]{display:none!important}
+
+/* Páginas legales */
+.legal{padding-top:20px;padding-bottom:30px;max-width:760px}
+.legal h1{font-size:1.5rem;margin:0 0 4px}
+.legal h2{font-size:1.05rem;margin:22px 0 6px;color:var(--hi)}
+.legal p,.legal li{color:var(--tx2);line-height:1.6}
+.legal ul{padding-left:20px}
+.legalnav{margin-top:26px;font-size:.9rem}
+.legalrow{font-size:.85rem;margin:6px 0}.legalrow a{color:var(--tx2);text-decoration:underline}
+
+.fchips{flex-wrap:wrap;overflow:visible}

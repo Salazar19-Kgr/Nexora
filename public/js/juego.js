@@ -72,11 +72,30 @@
   }
   $('#usecoins').addEventListener('change', refreshCoins);
 
+  // Verificación de ID (solo si el proveedor está activo y hay sesión). Es informativa: no bloquea la compra.
+  var canCheck = false;
+  NX.ready.then(function (o) {
+    if (!o.session) return;
+    return NXApi('/api/verify-player/status').then(function (r) { canCheck = !!(r && r.available); refreshCheck(); });
+  }).catch(function () {});
+  function refreshCheck() { var b = $('#chkid'); if (b) b.hidden = !(canCheck && sel); }
+  $('#chkid').addEventListener('click', function () {
+    var out = $('#idres'), pid = $('#player_id').value.trim();
+    out.className = 'msg'; if (!pid) { out.textContent = 'Escribe tu ID primero.'; return; }
+    out.textContent = 'Verificando…';
+    NXApi('/api/check-id', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ product_id: sel.id, player_id: pid, server: $('#server').value.trim() }) }, token)
+      .then(function (r) {
+        if (r.status === 'valid') { out.className = 'msg ok'; out.textContent = r.nickname ? '✓ Cuenta encontrada: ' + r.nickname : '✓ ID válido'; }
+        else if (r.status === 'invalid') out.textContent = 'No encontramos ese ID' + (r.message ? ' (' + r.message + ')' : '') + '. Revísalo antes de pagar.';
+        else out.textContent = 'No pudimos verificarlo ahora. Revisa bien tu ID.';
+      }).catch(function (e) { out.textContent = e.message; });
+  });
+
   function choose(p, el) {
     sel = p;
     Array.prototype.forEach.call(document.querySelectorAll('.prow'), function (x) { x.classList.toggle('on', x === el); x.setAttribute('aria-checked', x === el ? 'true' : 'false'); });
     var first = $('#step2').hidden; $('#step2').hidden = false; $('#buybar').hidden = false;
-    refreshCoins();
+    refreshCoins(); refreshCheck(); $('#idres').textContent = '';
     say('');
     if (first) setTimeout(function () { $('#step2').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
   }
