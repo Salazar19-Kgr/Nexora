@@ -405,3 +405,16 @@ svg.coin,svg.pa:not(.ic){width:34px;height:34px}
 .legalrow{font-size:.85rem;margin:6px 0}.legalrow a{color:var(--tx2);text-decoration:underline}
 
 .fchips{flex-wrap:wrap;overflow:visible}
+
+/* Etiquetas de la tienda (descuento, nuevo, vendidos) y orden */
+.tile .tw{position:relative}
+.bdg{position:absolute;top:6px;left:6px;display:flex;flex-direction:column;gap:4px;align-items:flex-start;z-index:2}
+.bdg span{font-size:.68rem;font-weight:800;letter-spacing:.04em;padding:2px 7px;border-radius:99px;line-height:1.3}
+.b-off{background:#ff3d57;color:#fff;box-shadow:0 0 10px rgba(255,61,87,.55)}
+.b-new{background:var(--acc);color:#04210d;box-shadow:0 0 10px rgba(22,217,74,.55)}
+.tile .sold{margin-top:2px;font-size:.7rem;color:var(--tx2)}
+.sorts{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.sorts button{height:34px;padding:0 14px;border-radius:10px;border:1px solid var(--line2);background:none;color:var(--tx2);font:inherit;font-size:.85rem;font-weight:700;cursor:pointer}
+.sorts button.on{color:#04210d;background:var(--acc);border-color:var(--acc);box-shadow:0 0 14px rgba(22,217,74,.35)}
+/* Nombre en estilo gamer: degradado neón con brillo */
+.wm{font-style:normal;font-weight:900;letter-spacing:.2em;background:linear-gradient(90deg,#fff 0%,#9dffb8 55%,#16D94A 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 8px rgba(22,217,74,.45))}

@@ -109,8 +109,21 @@ async function readBody(request) {
 }
 
 // ---------- Tienda pública ----------
-const listGames = (env) =>
-  sb(env, "games?status=eq.active&select=id,slug,name,category,description,icon_url,required_fields&order=sort_order.asc");
+// Ventas redondeadas hacia abajo a un escalón ("50+"), para no exponer cifras exactas ni inventar nada.
+const SOLD_BANDS = [10000, 5000, 1000, 500, 100, 50, 10];
+const soldBand = (n) => SOLD_BANDS.find((b) => n >= b) || 0;
+async function listGames(env) {
+  const [games, stats] = await Promise.all([
+    sb(env, "games?status=eq.active&select=id,slug,name,category,description,icon_url,required_fields,created_at&order=sort_order.asc"),
+    rpc(env, "game_stats", {}).catch(() => []),
+  ]);
+  const by = new Map((stats || []).map((r) => [r.game_id, r]));
+  const fresh = Date.now() - 14 * 86400000;
+  return games.map(({ created_at, ...g }, i) => {
+    const st = by.get(g.id) || {};
+    return { ...g, rank: i, sold: soldBand(Number(st.sold) || 0), discount_pct: Math.min(Number(st.discount_pct) || 0, 90), is_new: new Date(created_at).getTime() > fresh };
+  });
+}
 
 async function listProducts(env, slug) {
   const g = await sb(env, `games?slug=eq.${encodeURIComponent(slug)}&status=eq.active&select=id`);
@@ -473,6 +486,7 @@ const RES = {
       price_usd: { t: "num", label: "Precio en USD", req: true, min: 0, max: 100000 },
       delivery_type: { t: "enum", label: "Entrega", list: ["manual", "code", "api"], def: "manual" },
       provider_offer_id: { t: "num", label: "ID de oferta GamesDrop", int: true, min: 1, max: 999999999 },
+      old_price_usd: { t: "num", label: "Precio anterior (USD)", min: 0.01, max: 100000 },
       status: { t: "enum", label: "Estado", list: ST, def: "draft" },
     },
     async beforeCreate(env, out) {

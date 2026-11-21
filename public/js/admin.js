@@ -226,7 +226,7 @@
         var margin = r.cost != null && r.cost_currency === 'USD' && Number(r.cost) > 0 ? 'Margen ' + usd(r.price_usd - r.cost) : null;
         return {
           title: r.name, sub: (r.games ? r.games.name : 'Juego') + ' · ' + r.sku,
-          chips: [pricesChip(r, ex)].concat(['Venezuela ' + usd(r.price_usd), r.cost != null ? 'Costo ' + Number(r.cost) + ' ' + r.cost_currency : null, margin, ES.delivery[r.delivery_type] || r.delivery_type, r.provider_offer_id ? 'GamesDrop #' + r.provider_offer_id : null]),
+          chips: [pricesChip(r, ex)].concat(['Venezuela ' + usd(r.price_usd), r.cost != null ? 'Costo ' + Number(r.cost) + ' ' + r.cost_currency : null, margin, ES.delivery[r.delivery_type] || r.delivery_type, r.provider_offer_id ? 'GamesDrop #' + r.provider_offer_id : null, Number(r.old_price_usd) > Number(r.price_usd) ? 'Antes ' + usd(r.old_price_usd) : null]),
           badge: ES.pub[r.status]
         };
       },
@@ -235,6 +235,7 @@
           { k: 'game_id', label: 'Juego', type: 'select', opts: gameOpts(ex.games) },
           { k: 'name', label: 'Nombre del paquete', max: 80, hint: 'Ej: 100 Diamantes' },
           { k: 'price_usd', label: 'Precio en Venezuela (USD)', type: 'number', step: '0.01', hint: 'Los demás países se fijan con el botón “Precios por país”.' },
+          { k: 'old_price_usd', label: 'Precio anterior en Venezuela (USD, opcional)', type: 'number', step: '0.01', hint: 'Si lo pones y es mayor que el precio actual, la tienda muestra el % de descuento real en ese juego. Déjalo vacío para quitarlo.' },
           { k: 'cost', label: 'Costo (lo que te cuesta)', type: 'number', step: '0.01', def: 0 },
           { k: 'cost_currency', label: 'Moneda del costo', type: 'select', opts: [['USD', 'USD'], ['VES', 'Bs (VES)'], ['USDT', 'USDT']], def: 'USD' },
           { k: 'delivery_type', label: 'Entrega', type: 'select', opts: [['manual', 'Manual (tú la haces)'], ['code', 'Códigos'], ['api', 'API del proveedor']], def: 'manual' },
