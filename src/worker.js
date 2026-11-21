@@ -82,6 +82,9 @@ const PG_MSG = {
   referencia_usada: [409, "Esa referencia ya fue usada en otro pago."],
   comprobante_no_pendiente: [409, "Ese comprobante ya fue revisado."],
   accion_invalida: [400, "Acción no válida."],
+  reembolso_pendiente: [409, "Ya hay una solicitud de reembolso pendiente para este pedido."],
+  reembolso_decidido: [409, "Esa solicitud ya fue resuelta."],
+  misma_persona: [403, "Otra persona debe aprobar o rechazar tu solicitud de reembolso."],
   pais_requerido: [409, "Elige tu país para continuar."],
 };
 
@@ -732,12 +735,43 @@ async function orderStatus(env, ctx, id, body) {
   const cur = await sb(env, `orders?id=eq.${id}&select=id,status`, { service: true });
   if (!cur.length) throw bad("Pedido no encontrado.", 404);
   if (!NEXT[cur[0].status].includes(to)) throw bad("Ese cambio de estado no está permitido.", 409);
+  if (to === "refunded" && refundDouble(env)) {
+    const rid = await rpc(env, "refund_request", { p_order: id, p_actor: ctx.user.id, p_reason: String(body.reason || "") });
+    await audit(env, ctx.user.id, "refund.request", "orders", id, { status: cur[0].status }, { request: rid });
+    return json({ status: cur[0].status, refund_pending: true });
+  }
   const rows = await sb(env, `orders?id=eq.${id}&status=eq.${cur[0].status}`, {
     method: "PATCH", service: true, headers: { prefer: "return=representation" }, body: { status: to, updated_at: new Date().toISOString() },
   });
   if (!rows.length) throw bad("El pedido cambió mientras lo editabas. Recarga la lista.", 409);
   await audit(env, ctx.user.id, "order.status", "orders", id, { status: cur[0].status }, { status: to });
   return json({ status: to });
+}
+
+// Con REFUND_DOUBLE_APPROVAL=1 un reembolso necesita dos personas distintas (solicita y aprueba).
+const refundDouble = (env) => String(env.REFUND_DOUBLE_APPROVAL || "") === "1";
+
+async function refundsList(env, ctx) {
+  need(ctx, "payments.write");
+  const rows = await sb(env,
+    `refund_requests?status=eq.pending&select=${encodeURIComponent("id,order_id,requested_by,reason,created_at,orders(amount_usd,status,country,products(name,games(name)))")}&order=created_at.asc&limit=100`,
+    { service: true });
+  const ids = [...new Set(rows.map((r) => r.requested_by).filter(Boolean))];
+  let names = new Map();
+  if (ids.length) {
+    const ps = await sb(env, `profiles?id=in.(${ids.join(",")})&select=id,username`, { service: true });
+    names = new Map(ps.map((p) => [p.id, p.username]));
+  }
+  return json({ double: refundDouble(env), rows: rows.map((r) => ({ ...r, requested_by_name: names.get(r.requested_by) || null, mine: r.requested_by === ctx.user.id })) });
+}
+
+async function refundDecide(env, ctx, id, action) {
+  need(ctx, "payments.write");
+  id = uuidOrFail(id);
+  if (!["approve", "reject"].includes(action)) throw bad("Acción no válida.");
+  const r = await rpc(env, "refund_decide", { p_id: id, p_actor: ctx.user.id, p_approve: action === "approve" });
+  await audit(env, ctx.user.id, `refund.${action}`, "refund_requests", id, null, null);
+  return json({ result: r });
 }
 
 async function orderPayment(env, ctx, id, body) {
@@ -845,6 +879,8 @@ async function admin(env, request, url) {
     return json({ role: ctx.role, username: ctx.username, perms: ctx.perms.includes("*") ? ALL_PERMS : ctx.perms });
   }
   if (a === "stats" && m === "GET") return stats(env, ctx);
+  if (a === "refunds" && !b && m === "GET") return refundsList(env, ctx);
+  if (a === "refunds" && b && c && m === "POST") return refundDecide(env, ctx, b, c);
   if (a === "provider" && !b && m === "GET") return providerInfo(env, ctx);
   if (a === "provider" && b === "offers" && m === "POST") return providerOffers(env, ctx, await readBody(request));
   if (a === "deliveries" && !b && m === "GET") return deliveriesList(env, ctx, url);
@@ -963,6 +999,7 @@ async function health(env) {
   out.admin_con_clave_secreta = await probe("coupons?select=id&limit=1", true);
   out.pagos_con_clave_secreta = await probe("payment_methods?select=id&limit=1", true);
   out.bot_configurado = !!env.BOT_SECRET;
+  out.reembolso_doble_aprobacion = refundDouble(env);
   out.proveedor_configurado = gdConfigured(env);
   out.proveedor_en_vivo = gdLive(env);
   out.entregas_con_clave_secreta = await probe("fulfillments?select=id&limit=1", true);

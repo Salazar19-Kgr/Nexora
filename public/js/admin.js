@@ -427,6 +427,33 @@
   }
   function act(f, a, reload) { api('deliveries/' + f.id + '/' + a, { body: {} }).then(function () { toast('Listo'); reload(); }).catch(function (e) { toast(e.message, true); }); }
 
+  // ---------- Reembolsos (doble aprobación) ----------
+  function viewRefunds() {
+    view.replaceChildren(h('p', { class: 'muted', text: 'Cargando…' }));
+    api('refunds').then(function (d) {
+      var list = h('div', { class: 'alist' });
+      if (!d.rows.length) list.append(h('div', { class: 'empty', text: 'No hay reembolsos pendientes.' }));
+      d.rows.forEach(function (r) {
+        var o = r.orders || {}, p = o.products || {}, g = p.games || {};
+        var acts = h('div', { class: 'aact wrap2' });
+        if (r.mine) acts.append(h('small', { class: 'muted', text: 'Tú lo solicitaste: otra persona debe aprobarlo.' }));
+        else {
+          acts.append(h('button', { class: 'btn sm', text: 'Aprobar reembolso', onclick: function () {
+            if (confirm('¿Aprobar el reembolso de ' + usd(o.amount_usd) + '? El pedido quedará como reembolsado.')) decide(r, 'approve');
+          } }));
+          acts.append(h('button', { class: 'btn ghost sm', text: 'Rechazar', onclick: function () { decide(r, 'reject'); } }));
+        }
+        list.append(h('div', { class: 'arow col' },
+          h('div', { class: 'otop' }, h('div', { class: 'ainfo' }, h('b', { text: '#' + short(r.order_id) + ' · ' + (g.name || 'Juego') + ' · ' + (p.name || 'Paquete') }),
+            h('small', { text: 'Solicitó ' + (r.requested_by_name || 'alguien') + ' · ' + when(r.created_at) })), badge(['Pendiente', 'wait'])),
+          h('div', { class: 'olines' }, [h('small', { text: 'Monto ' + usd(o.amount_usd) + (r.reason ? ' · Motivo: ' + r.reason : '') })]), acts));
+      });
+      var note = d.double ? null : h('p', { class: 'note', text: 'La doble aprobación está apagada: los reembolsos se hacen en un solo paso. Para exigir dos personas, agrega REFUND_DOUBLE_APPROVAL = 1 en Cloudflare (y crea una segunda cuenta de staff).' });
+      show('Reembolsos', 'Una persona solicita y otra distinta aprueba.', null, h('div', null, note, list));
+    }).catch(fail);
+    function decide(r, a) { api('refunds/' + r.id + '/' + a, { body: {} }).then(function () { toast(a === 'approve' ? 'Reembolso aprobado' : 'Solicitud rechazada'); viewRefunds(); }).catch(function (e) { toast(e.message, true); }); }
+  }
+
   // ---------- Proveedor en el Resumen ----------
   function providerCard() {
     var box = h('div', { class: 'card' }, h('h2', { text: 'Proveedor de recargas (GamesDrop)' }), h('p', { class: 'muted', text: 'Consultando…' }));
@@ -540,7 +567,7 @@
         if (to === 'refunded' && !has('payments.write')) return;
         acts.append(h('button', { class: 'btn ghost sm', text: TOLABEL[to], onclick: function () {
           if ((to === 'rejected' || to === 'refunded' || to === 'disputed') && !confirm('¿' + TOLABEL[to] + ' el pedido #' + short(o.id) + '?')) return;
-          api('orders/' + o.id + '/status', { body: { status: to } }).then(function () { toast('Pedido actualizado'); reload(); }).catch(function (e) { toast(e.message, true); });
+          api('orders/' + o.id + '/status', { body: { status: to } }).then(function (r) { toast(r && r.refund_pending ? 'Solicitud enviada: otra persona debe aprobarla en Reembolsos' : 'Pedido actualizado'); reload(); }).catch(function (e) { toast(e.message, true); });
         } }));
       });
     }
@@ -699,6 +726,7 @@
     { id: 'resumen', label: 'Resumen', icon: 'panel', perm: 'stats', go: viewStats },
     { id: 'pedidos', label: 'Pedidos', icon: 'list', perm: 'orders.read', go: viewOrders },
     { id: 'entregas', label: 'Entregas', icon: 'bolt', perm: 'orders.read', go: viewDeliveries },
+    { id: 'reembolsos', label: 'Reembolsos', icon: 'wallet', perm: 'payments.write', go: viewRefunds },
     { id: 'usuarios', label: 'Usuarios', icon: 'user', perm: 'users.read', go: viewUsers },
     { id: 'juegos', label: 'Juegos', icon: 'gamepad', perm: 'catalog.read', go: function () { CFG.games.canWrite = has('catalog.write'); return manager(CFG.games); } },
     { id: 'precios', label: 'Precios', icon: 'wallet', perm: 'catalog.read', go: function () { CFG.products.canWrite = has('catalog.write'); return manager(CFG.products); } },
