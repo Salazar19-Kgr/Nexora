@@ -190,8 +190,12 @@
     games: {
       name: 'games', title: 'Juegos', desc: 'Los juegos que se muestran en la tienda.', canWrite: false, newTitle: 'Agregar juego', editTitle: 'Editar juego', empty: 'Aún no hay juegos.',
       values: function (r) { return Object.assign({}, r, { required_fields: (r.required_fields || []).join(',') }); },
+      actions: function (r, ex, reload) {
+        if (!has('catalog.write')) return null;
+        return h('button', { class: 'btn sm', text: r.icon_url ? 'Cambiar logo' : 'Subir logo', onclick: function () { pickLogo(r, reload); } });
+      },
       item: function (r) {
-        return { title: r.name, sub: r.category + ' · /' + r.slug, chips: ['Orden ' + r.sort_order, 'Datos: ' + (r.required_fields || []).join(' + ')], badge: ES.pub[r.status] };
+        return { title: r.name, sub: r.category + ' · /' + r.slug + (r.icon_url ? ' · con logo' : ' · sin logo'), chips: ['Orden ' + r.sort_order, 'Datos: ' + (r.required_fields || []).join(' + ')], badge: ES.pub[r.status] };
       },
       fields: function (row) {
         return [
@@ -372,6 +376,41 @@
         q, h('button', { type: 'button', class: 'btn sm', text: 'Buscar', onclick: search }), msg, out,
         h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn ghost', text: 'Cerrar', onclick: close })));
       q.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); search(); } });
+    });
+  }
+
+  // ---------- Logo del juego: se elige de la galería, se recorta cuadrado a 512 px y se sube ----------
+  function pickLogo(game, reload) {
+    var inp = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', hidden: true });
+    document.body.append(inp);
+    inp.addEventListener('change', function () {
+      var f = inp.files && inp.files[0]; inp.remove();
+      if (!f) return;
+      toast('Procesando imagen…');
+      squareBlob(f).then(function (blob) {
+        var fd = new FormData(); fd.append('image', blob, 'logo.webp');
+        return sb.auth.getSession().then(function (r) {
+          var t = r.data.session ? r.data.session.access_token : null;
+          return fetch('/api/admin/games/' + game.id + '/icon', { method: 'POST', headers: { authorization: 'Bearer ' + t }, body: fd });
+        });
+      }).then(function (r) {
+        return r.json().catch(function () { return null; }).then(function (d) { if (!r.ok) throw new Error((d && d.error) || 'No se pudo subir'); return d; });
+      }).then(function () { toast('Logo guardado'); reload(); }).catch(function (e) { toast(e.message, true); });
+    });
+    inp.click();
+  }
+  function squareBlob(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function () {
+        var S = 512, c = document.createElement('canvas'); c.width = S; c.height = S;
+        var side = Math.min(im.width, im.height), sx = (im.width - side) / 2, sy = (im.height - side) / 2;
+        c.getContext('2d').drawImage(im, sx, sy, side, side, 0, 0, S, S);
+        URL.revokeObjectURL(url);
+        c.toBlob(function (b) { b ? resolve(b) : reject(new Error('No se pudo procesar la imagen')); }, 'image/webp', 0.9);
+      };
+      im.onerror = function () { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen')); };
+      im.src = url;
     });
   }
 

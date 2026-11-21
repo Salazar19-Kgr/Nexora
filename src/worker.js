@@ -217,17 +217,17 @@ function imageType(b) {
   return null;
 }
 
-async function storageUpload(env, path, bytes, type) {
-  const r = await fetch(`${env.SUPABASE_URL}/storage/v1/object/proofs/${path}`, {
+async function storageUpload(env, path, bytes, type, bucket = "proofs") {
+  const r = await fetch(`${env.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
     method: "POST",
     headers: { ...authHeaders(env.SUPABASE_SERVICE_ROLE_KEY), "content-type": type, "x-upsert": "false" },
     body: bytes,
   });
   if (!r.ok) throw new Error("storage_upload");
 }
-async function storageRemove(env, path) {
+async function storageRemove(env, path, bucket = "proofs") {
   try {
-    await fetch(`${env.SUPABASE_URL}/storage/v1/object/proofs/${path}`, { method: "DELETE", headers: authHeaders(env.SUPABASE_SERVICE_ROLE_KEY) });
+    await fetch(`${env.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, { method: "DELETE", headers: authHeaders(env.SUPABASE_SERVICE_ROLE_KEY) });
   } catch (e) { /* mejor esfuerzo */ }
 }
 
@@ -833,6 +833,33 @@ async function proofReview(env, ctx, id, body) {
   return json(r);
 }
 
+// Logo del juego: el staff sube la imagen (el panel la reduce a 512 px) y se guarda en el bucket público "game-art".
+const GAME_ART = "game-art";
+async function gameIcon(env, ctx, id, request) {
+  need(ctx, "catalog.write");
+  id = uuidOrFail(id);
+  if (Number(request.headers.get("content-length") || 0) > 2 * 1024 * 1024) throw bad("La imagen es demasiado pesada (máximo 2 MB).", 413);
+  const form = await request.formData().catch(() => null);
+  const file = form && form.get("image");
+  if (!file || typeof file === "string" || !file.size) throw bad("Elige una imagen.");
+  if (file.size > 1.5 * 1024 * 1024) throw bad("La imagen es demasiado pesada (máximo 1.5 MB).", 413);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const t = imageType(bytes);
+  if (!t) throw bad("Formato no válido. Usa JPG, PNG o WebP.");
+  const g = await sb(env, `games?id=eq.${id}&select=id,icon_url`, { service: true });
+  if (!g.length) throw bad("Juego no encontrado.", 404);
+  const name = `${id}-${Date.now().toString(36)}.${t[1]}`;
+  try { await storageUpload(env, name, bytes, t[0], GAME_ART); }
+  catch (e) { throw bad("No se pudo guardar la imagen. ¿Creaste el bucket game-art en Supabase?", 502); }
+  const url = `${env.SUPABASE_URL}/storage/v1/object/public/${GAME_ART}/${name}`;
+  await sb(env, `games?id=eq.${id}`, { method: "PATCH", service: true, body: { icon_url: url } });
+  const old = String(g[0].icon_url || "");
+  const prefix = `${env.SUPABASE_URL}/storage/v1/object/public/${GAME_ART}/`;
+  if (old.startsWith(prefix)) await storageRemove(env, old.slice(prefix.length), GAME_ART);
+  await audit(env, ctx.user.id, "game.icon", "games", id, { icon_url: old || null }, { icon_url: url });
+  return json({ icon_url: url });
+}
+
 async function setRate(env, ctx, body) {
   need(ctx, "rates.write");
   const quote = body.quote === undefined ? "VES" : String(body.quote);
@@ -879,6 +906,7 @@ async function admin(env, request, url) {
     return json({ role: ctx.role, username: ctx.username, perms: ctx.perms.includes("*") ? ALL_PERMS : ctx.perms });
   }
   if (a === "stats" && m === "GET") return stats(env, ctx);
+  if (a === "games" && b && c === "icon" && m === "POST") return gameIcon(env, ctx, b, request);
   if (a === "refunds" && !b && m === "GET") return refundsList(env, ctx);
   if (a === "refunds" && b && c && m === "POST") return refundDecide(env, ctx, b, c);
   if (a === "provider" && !b && m === "GET") return providerInfo(env, ctx);

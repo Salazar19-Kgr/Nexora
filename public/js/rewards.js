@@ -79,25 +79,45 @@
     box.replaceChildren();
     if (!prizes.length) { var p = document.createElement('p'); p.className = 'muted'; p.textContent = 'La ruleta aún no tiene premios.'; box.append(p); box.style.aspectRatio = 'auto'; return; }
     box.style.aspectRatio = '1';
-    var n = prizes.length, sa = 360 / n, C = 150, R = 144;
+    var n = prizes.length, sa = 360 / n, C = 150, R = 136;
     var svg = el('svg', { viewBox: '0 0 300 300', role: 'img', 'aria-label': 'Ruleta de premios con ' + n + ' premios' });
+    var defs = el('defs', {});
+    var rg = el('radialGradient', { id: 'wgl', gradientUnits: 'userSpaceOnUse', cx: 150, cy: 150, r: 136 });
+    rg.append(el('stop', { offset: '0', 'stop-color': '#000', 'stop-opacity': '.45' }), el('stop', { offset: '1', 'stop-color': '#16D94A', 'stop-opacity': '.22' }));
+    defs.append(rg); svg.append(defs);
+    // aro exterior con luces
+    svg.append(el('circle', { cx: C, cy: C, r: 148, fill: '#06130b', stroke: '#16D94A', 'stroke-width': 2.5 }));
+    for (var k = 0; k < 24; k++) { var lp = pt(C, C, 142, k * 15); svg.append(el('circle', { cx: lp[0].toFixed(1), cy: lp[1].toFixed(1), r: 2.2, fill: k % 2 ? '#c9ffd6' : '#16D94A' })); }
     var g = el('g', { class: 'wheel', id: 'wheelg' });
-    var fills = ['#0f3a1d', '#0a1f12', '#14502a', '#0b2a16'];
+    var TINT = { common: '#103c1f', unc: '#0e3a4a', epic: '#3a1f5a', leg: '#5a4510', none: '#10191a' };
+    var EDGE = { common: '#16D94A', unc: '#38bdf8', epic: '#a78bfa', leg: '#fbbf24', none: '#4b5b55' };
     prizes.forEach(function (pr, i) {
-      var f = fills[i % fills.length];
-      if (n === 1) { g.append(el('circle', { cx: C, cy: C, r: R, fill: f, stroke: '#16D94A', 'stroke-width': 2 })); }
+      var tk = tier(pr)[1], f = TINT[tk] || '#103c1f', ed = EDGE[tk] || '#16D94A';
+      if (n === 1) { g.append(el('circle', { cx: C, cy: C, r: R, fill: f, stroke: ed, 'stroke-width': 2 })); }
       else {
         var a = pt(C, C, R, i * sa), b = pt(C, C, R, (i + 1) * sa);
-        g.append(el('path', { d: 'M' + C + ' ' + C + 'L' + a[0].toFixed(2) + ' ' + a[1].toFixed(2) + 'A' + R + ' ' + R + ' 0 ' + (sa > 180 ? 1 : 0) + ' 1 ' + b[0].toFixed(2) + ' ' + b[1].toFixed(2) + 'Z', fill: f, stroke: '#16D94A', 'stroke-width': 1.5 }));
+        var d = 'M' + C + ' ' + C + 'L' + a[0].toFixed(2) + ' ' + a[1].toFixed(2) + 'A' + R + ' ' + R + ' 0 ' + (sa > 180 ? 1 : 0) + ' 1 ' + b[0].toFixed(2) + ' ' + b[1].toFixed(2) + 'Z';
+        g.append(el('path', { d: d, fill: i % 2 ? f : f, stroke: '#16D94A', 'stroke-width': 1.2, 'stroke-opacity': .7 }));
+        g.append(el('path', { d: d, fill: 'url(#wgl)', opacity: i % 2 ? .55 : .85 }));
       }
-      var mid = (i + 0.5) * sa, tp = pt(C, C, R * 0.62, mid);
-      var t = el('text', { x: tp[0].toFixed(2), y: tp[1].toFixed(2), transform: 'rotate(' + (mid - 90) + ' ' + tp[0].toFixed(2) + ' ' + tp[1].toFixed(2) + ')', 'text-anchor': 'middle', 'dominant-baseline': 'middle', fill: '#F4F7F5', 'font-size': n > 8 ? 9 : 11, 'font-weight': 700 });
-      t.textContent = pr.label.length > 14 ? pr.label.slice(0, 13) + '…' : pr.label;
-      g.append(t);
+      // contenido del sector: moneda arriba (hacia el borde) y valor debajo, siempre legible
+      var mid = (i + 0.5) * sa, sg = el('g', { transform: 'rotate(' + mid + ' ' + C + ' ' + C + ')' });
+      var sz = n > 8 ? 26 : 34;
+      if (pr.prize_type === 'coins') {
+        var u = el('use', { href: '#m-coin', x: C - sz / 2, y: C - R + 8, width: sz, height: sz });
+        sg.append(u);
+        var t = el('text', { x: C, y: C - R + sz + 22, 'text-anchor': 'middle', fill: '#eafff0', 'font-size': n > 8 ? 12 : 15, 'font-weight': 800 });
+        t.textContent = String(Math.trunc(Number(pr.value) || 0)); sg.append(t);
+      } else {
+        var lab = pr.prize_type === 'none' ? 'Nada' : (pr.label.length > 10 ? pr.label.slice(0, 9) + '…' : pr.label);
+        var t2 = el('text', { x: C, y: C - R + 30, 'text-anchor': 'middle', fill: pr.prize_type === 'none' ? '#8a9a93' : '#F4F7F5', 'font-size': n > 8 ? 10 : 12, 'font-weight': 800 });
+        t2.textContent = lab; sg.append(t2);
+      }
+      g.append(sg);
     });
     svg.append(g);
-    svg.append(el('circle', { cx: C, cy: C, r: 18, fill: '#050907', stroke: '#16D94A', 'stroke-width': 3 }));
-    svg.append(el('circle', { cx: C, cy: C, r: R + 3, fill: 'none', stroke: '#16D94A', 'stroke-width': 3, opacity: .6 }));
+    svg.append(el('circle', { cx: C, cy: C, r: 26, fill: '#050907', stroke: '#16D94A', 'stroke-width': 3 }));
+    svg.append(el('use', { href: '#m-coin', x: C - 19, y: C - 21, width: 38, height: 38 }));
     var ptr = document.createElement('div'); ptr.className = 'pointer'; ptr.setAttribute('aria-hidden', 'true');
     box.append(svg, ptr);
     $('#wheelg').style.transformOrigin = '150px 150px';
