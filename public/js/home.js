@@ -11,8 +11,7 @@
       var wrap = document.createElement('div'); wrap.className = 'tw'; wrap.append(NXArt.logo(g));
       var box = document.createElement('div'); box.className = 'bdg';
       if (g.discount_pct > 0) { var d = document.createElement('span'); d.className = 'b-off'; d.textContent = '-' + g.discount_pct + '%'; box.append(d); }
-      if (g.is_new) { var n = document.createElement('span'); n.className = 'b-new'; n.textContent = 'NUEVO'; box.append(n); }
-      wrap.append(box); a.append(wrap, nm);
+      if (box.children.length) wrap.append(box); a.append(wrap, nm);
       if (g.sold > 0) { var s = document.createElement('div'); s.className = 'sold'; s.textContent = g.sold.toLocaleString('es-VE') + '+ vendidos'; a.append(s); }
       tiles.append(a);
     });
