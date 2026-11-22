@@ -9,6 +9,8 @@
     b.addEventListener('click', function () { var i = document.getElementById(b.dataset.eye); i.type = i.type === 'password' ? 'text' : 'password'; });
   });
 
+  if (window.NXCaptcha) NXCaptcha.init('#cap');
+  function needCap(id) { if (window.NXCaptcha && NXCaptcha.required() && !NXCaptcha.token()) { say(id, 'Completa la verificación de seguridad (no soy un robot).'); return true; } return false; }
   function enter(r) {
     return NX.ready.then(function (o) {
       if (!o.sb) throw new Error('sin cliente');
@@ -31,8 +33,10 @@
     e.preventDefault(); say('#ml', ''); var b = $('#bl');
     var u = $('#lu').value.trim(), p = $('#lp').value;
     if (!u || !p) return say('#ml', 'Completa usuario y contraseña.');
+    if (needCap('#ml')) return;
     b.disabled = true;
-    post('/api/ceo/login', { username: u, password: p }).then(function (r) {
+    post('/api/ceo/login', { username: u, password: p, captcha: window.NXCaptcha ? NXCaptcha.token() : null }).then(function (r) {
+      if (window.NXCaptcha) NXCaptcha.reset();
       if (!r.ok) { say('#ml', r.d.error || 'No se pudo iniciar sesión.'); b.disabled = false; return; }
       return enter(r);
     }).catch(function () { say('#ml', 'Error de conexión. Intenta de nuevo.'); b.disabled = false; });
@@ -47,10 +51,7 @@
     b.disabled = true;
     post('/api/ceo/register', { setup_key: k, username: u, password: p }).then(function (r) {
       if (!r.ok) { say('#mr', r.d.error || 'No se pudo crear el acceso.'); b.disabled = false; return; }
-      return post('/api/ceo/login', { username: u, password: p }).then(function (l) {
-        if (!l.ok) { say('#mr', 'Acceso creado. Inicia sesión.', true); setTimeout(function () { location.reload(); }, 1200); return; }
-        return enter(l);
-      });
+      say('#mr', 'Acceso creado. Ahora inicia sesión.', true); setTimeout(function () { location.reload(); }, 1200);
     }).catch(function () { say('#mr', 'Error de conexión. Intenta de nuevo.'); b.disabled = false; });
   });
 })();

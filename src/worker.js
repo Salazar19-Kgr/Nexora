@@ -336,6 +336,9 @@ async function spin(env, request) {
 }
 
 // ---------- Inicio de sesión con correo O usuario ----------
+// Si en Supabase está activada la protección CAPTCHA, el token de Turnstile se reenvía tal cual (Supabase lo verifica).
+const captchaMeta = (t) => { const v = String(t || "").slice(0, 2100); return v ? { gotrue_meta_security: { captcha_token: v } } : {}; };
+
 async function login(env, request) {
   limit(`login:${clientIp(request)}`, 12, 60000);
   const input = await request.json().catch(() => null);
@@ -357,7 +360,7 @@ async function login(env, request) {
   const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: authHeaders(env.SUPABASE_ANON_KEY),
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, ...captchaMeta(input && input.captcha) }),
   });
   if (!res.ok) return fail();
   const s = await res.json();
@@ -394,13 +397,24 @@ const ROLES = ["owner", "admin", "operator", "finance", "support", "customer"];
 const has = (ctx, perm) => ctx.perms.includes("*") || ctx.perms.includes(perm);
 const need = (ctx, perm) => { if (!has(ctx, perm)) throw bad("Tu rol no permite esta acción.", 403); };
 
-async function staff(env, request) {
+// Verificación en 2 pasos del panel: con ADMIN_MFA=1 solo entra quien ya verificó su código (el token trae aal2).
+const mfaOn = (env) => String(env.ADMIN_MFA || "") === "1";
+function tokenAal(request) {
+  try {
+    const t = (request.headers.get("authorization") || "").slice(7).split(".")[1];
+    const j = JSON.parse(atob(t.replace(/-/g, "+").replace(/_/g, "/")));
+    return j.aal || "aal1";
+  } catch (e) { return "aal1"; }
+}
+async function staff(env, request, soft = false) {
   const user = await userFromToken(env, request);
   if (!user) throw bad("Inicia sesión.", 401);
   const rows = await sb(env, `profiles?id=eq.${user.id}&select=role,banned,username`, { service: true });
   const p = rows[0];
   if (!p || p.banned || !PERMS[p.role]) throw bad("Sin permiso.", 403);
-  return { user, role: p.role, username: p.username, perms: PERMS[p.role] };
+  const pending = mfaOn(env) && tokenAal(request) !== "aal2";
+  if (pending && !soft) throw bad("Verifica tu código de 2 pasos para entrar al panel.", 428);
+  return { user, role: p.role, username: p.username, perms: PERMS[p.role], mfaPending: pending };
 }
 
 async function audit(env, actor, action, type, id, before, after) {
@@ -965,13 +979,14 @@ async function auditList(env, ctx) {
 }
 
 async function admin(env, request, url) {
-  const ctx = await staff(env, request);
+  const ctx = await staff(env, request, /^\/api\/admin\/me\/?$/.test(url.pathname));
   const seg = url.pathname.replace(/^\/api\/admin\/?/, "").split("/").filter(Boolean);
   const m = request.method;
   const [a, b, c] = seg;
 
   if (a === "me" && m === "GET") {
-    return json({ role: ctx.role, username: ctx.username, perms: ctx.perms.includes("*") ? ALL_PERMS : ctx.perms });
+    if (ctx.mfaPending) return json({ role: ctx.role, username: ctx.username, perms: [], mfa_required: true });
+    return json({ role: ctx.role, username: ctx.username, perms: ctx.perms.includes("*") ? ALL_PERMS : ctx.perms, mfa_enforced: mfaOn(env) });
   }
   if (a === "stats" && m === "GET") return stats(env, ctx);
   if (a === "games" && b && c === "icon" && m === "POST") return gameIcon(env, ctx, b, request);
@@ -1064,7 +1079,7 @@ async function ceoLogin(env, request) {
   if (!username || !password) return json({ error: "Completa usuario y contraseña." }, 400);
   if (username.toLowerCase() !== String(row.username).toLowerCase()) return fail();
   const res = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: "POST", headers: authHeaders(env.SUPABASE_ANON_KEY), body: JSON.stringify({ email: row.email, password }),
+    method: "POST", headers: authHeaders(env.SUPABASE_ANON_KEY), body: JSON.stringify({ email: row.email, password, ...captchaMeta(b && b.captcha) }),
   });
   if (!res.ok) return fail();
   const s = await res.json();
@@ -1098,6 +1113,7 @@ async function health(env) {
   out.pagos_con_clave_secreta = await probe("payment_methods?select=id&limit=1", true);
   out.bot_configurado = !!env.BOT_SECRET;
   out.reembolso_doble_aprobacion = refundDouble(env);
+  out.admin_2fa_obligatorio = mfaOn(env);
   out.proveedor_configurado = gdConfigured(env);
   out.proveedor_en_vivo = gdLive(env);
   out.entregas_con_clave_secreta = await probe("fulfillments?select=id&limit=1", true);
@@ -1312,7 +1328,7 @@ export default {
       const m = request.method, p = url.pathname;
       if (p === "/api/health" && m === "GET") return await health(env);
       if (p === "/api/config" && m === "GET")
-        return json({ url: env.SUPABASE_URL, anonKey: env.SUPABASE_ANON_KEY }); // la clave pública es pública por diseño
+        return json({ url: env.SUPABASE_URL, anonKey: env.SUPABASE_ANON_KEY, turnstile: env.TURNSTILE_SITE_KEY || null }); // la clave pública es pública por diseño
       if (p === "/api/games" && m === "GET") return json(await listGames(env));
       const g = p.match(/^\/api\/games\/([a-z0-9-]+)\/products$/);
       if (g && m === "GET") return json(await listProducts(env, g[1]));

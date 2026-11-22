@@ -515,6 +515,62 @@
     function decide(r, a, why) { api('topups/' + r.id + '/' + a, { body: { reason: why || '' } }).then(function () { toast(a === 'approve' ? 'Saldo acreditado' : 'Recarga rechazada'); viewTopups(); }).catch(function (e) { toast(e.message, true); }); }
   }
 
+  // ---------- Verificación en 2 pasos (app autenticadora) ----------
+  function mfaFactors() {
+    return sb.auth.mfa.listFactors().then(function (r) {
+      var all = (r.data && r.data.all) || [];
+      return { ok: all.filter(function (f) { return f.factor_type === 'totp' && f.status === 'verified'; })[0] || null, stale: all.filter(function (f) { return f.factor_type === 'totp' && f.status !== 'verified'; }) };
+    });
+  }
+  function mfaEnroll(box, done) {
+    box.replaceChildren(h('p', { class: 'muted', text: 'Preparando…' }));
+    mfaFactors().then(function (f) {
+      return Promise.all(f.stale.map(function (x) { return sb.auth.mfa.unenroll({ factorId: x.id }); }));
+    }).then(function () {
+      return sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'NEXORA ' + Date.now().toString(36) });
+    }).then(function (r) {
+      if (r.error) throw r.error;
+      var d = r.data, code = h('input', { inputmode: 'numeric', maxlength: '6', placeholder: '000000', 'aria-label': 'Código de 6 dígitos', autocomplete: 'one-time-code' });
+      var qr = h('img', { alt: 'Código QR', width: '180', height: '180', style: 'background:#fff;border-radius:12px;padding:8px;align-self:center' }); qr.src = d.totp.qr_code;
+      box.replaceChildren(
+        h('p', { text: '1. Abre Google Authenticator, Authy o similar y escanea este código (o escribe la clave a mano).' }), qr,
+        h('p', { class: 'muted', text: 'Clave: ' + d.totp.secret }),
+        h('p', { text: '2. Escribe el código de 6 dígitos que te muestra la app.' }), code,
+        h('button', { class: 'btn', text: 'Confirmar y activar', onclick: function () {
+          sb.auth.mfa.challengeAndVerify({ factorId: d.id, code: code.value.replace(/\s+/g, '') }).then(function (v) {
+            if (v.error) throw v.error; toast('Verificación en 2 pasos activada'); done();
+          }).catch(function (e) { toast(e.message || 'Código incorrecto', true); });
+        } }));
+    }).catch(function (e) { box.replaceChildren(h('p', { class: 'note', text: 'No se pudo preparar: ' + (e.message || e) + '. En Supabase revisa Authentication → Sign In / Providers → MFA (TOTP activado).' })); });
+  }
+  function securityCard() {
+    var body = h('div', null, h('p', { class: 'muted', text: 'Consultando…' }));
+    var box = h('div', { class: 'card' }, h('h2', { text: 'Seguridad: verificación en 2 pasos' }), body);
+    function paint() {
+      mfaFactors().then(function (f) {
+        body.replaceChildren(
+          f.ok ? h('p', { text: 'Activada en tu cuenta. ' }) : h('p', { class: 'note', text: 'No la tienes activa. Actívala antes de vender: protege el panel aunque alguien robe tu contraseña.' }),
+          h('p', { class: 'muted', text: me.mfa_enforced ? 'El servidor ya EXIGE el código para entrar al panel.' : 'Aún es opcional. Cuando todos los del equipo la tengan, agrega ADMIN_MFA = 1 en Cloudflare para hacerla obligatoria.' }),
+          f.ok ? null : h('button', { class: 'btn sm', text: 'Activar ahora', onclick: function () { var b = h('div', { class: 'mfabox' }); body.replaceChildren(b); mfaEnroll(b, paint); } }));
+      }).catch(function () { body.replaceChildren(h('p', { class: 'muted', text: 'No disponible.' })); });
+    }
+    paint(); return box;
+  }
+  function mfaGate() {
+    var box = h('div', { class: 'card mfabox' }, h('p', { class: 'muted', text: 'Comprobando…' }));
+    view.replaceChildren(h('h1', { text: 'Verificación en 2 pasos' }), box);
+    function again() { api('me').then(function (m) { me = m; if (m.mfa_required) return mfaGate(); start(); }).catch(function (e) { toast(e.message, true); }); }
+    mfaFactors().then(function (f) {
+      if (!f.ok) { box.replaceChildren(h('p', { text: 'El panel exige verificación en 2 pasos. Vamos a activarla en tu cuenta.' }), h('div', { class: 'mfabox' })); mfaEnroll(box.querySelector('.mfabox'), again); return; }
+      var code = h('input', { inputmode: 'numeric', maxlength: '6', placeholder: '000000', 'aria-label': 'Código de 6 dígitos', autocomplete: 'one-time-code' });
+      box.replaceChildren(h('p', { text: 'Escribe el código de 6 dígitos de tu app autenticadora.' }), code,
+        h('button', { class: 'btn', text: 'Entrar', onclick: function () {
+          sb.auth.mfa.challengeAndVerify({ factorId: f.ok.id, code: code.value.replace(/\s+/g, '') }).then(function (v) { if (v.error) throw v.error; return sb.auth.refreshSession(); }).then(again)
+            .catch(function (e) { toast(e.message || 'Código incorrecto', true); });
+        } }));
+    });
+  }
+
   // ---------- Proveedor en el Resumen ----------
   function providerCard() {
     var box = h('div', { class: 'card' }, h('h2', { text: 'Proveedor de recargas (GamesDrop)' }), h('p', { class: 'muted', text: 'Consultando…' }));
@@ -571,6 +627,7 @@
         h('div', { class: 'kpis' }, k.map(function (x) { return h('div', { class: 'kpi' }, h('b', { text: String(x[1]) }), h('span', { text: x[0] })); })),
         h('p', { class: 'muted small', text: 'Ingresos = pedidos pagados, en entrega o completados.' }));
       body.append(providerCard());
+      body.append(securityCard());
       if (!s.products_active) body.append(h('p', { class: 'note', text: 'Todavía no hay paquetes activos, así que la tienda no muestra nada que comprar. Ve a “Precios” y activa tus paquetes.' }));
       if (has('rates.write')) {
         var qsel = h('select', { 'aria-label': 'Moneda de la tasa' }, [['VES', 'Bolívares (Venezuela)'], ['DOP', 'Pesos dominicanos (R. Dominicana)'], ['MXN', 'Pesos mexicanos (México)']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
@@ -833,7 +890,7 @@
   window.NX.ready.then(function (o) {
     if (!o.sb || !o.session) { location.replace('/login'); return; }
     sb = o.sb; myId = o.session.user.id;
-    return api('me').then(function (m) { me = m; start(); }).catch(function (e) {
+    return api('me').then(function (m) { me = m; if (m.mfa_required) mfaGate(); else start(); }).catch(function (e) {
       view.replaceChildren(h('div', { class: 'empty' }, e.status === 403 ? 'Esta cuenta no tiene acceso al panel. ' : (e.message + ' '), h('a', { href: '/', text: 'Volver al inicio', style: 'color:var(--hi);text-decoration:underline' })));
     });
   });

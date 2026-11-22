@@ -429,3 +429,6 @@ svg.coin,svg.pa:not(.ic){width:34px;height:34px}
 #topup .t-approved{color:var(--hi)}
 #topup .t-rejected{color:#ff7a7a}
 .balpay{margin:0 0 12px}
+.mfabox{display:grid;gap:12px}
+.mfabox input{height:50px;padding:0 14px;border-radius:12px;border:1px solid var(--line2);background:#060b08;outline:0;color:inherit;font-size:1.2rem;letter-spacing:.3em;text-align:center}
+.cap{display:flex;justify-content:center;min-height:0;margin:4px 0}

@@ -2,6 +2,8 @@
   var $ = function (s) { return document.querySelector(s); };
   var mode = document.body.dataset.mode;
   var msg = $('#msg'), go = $('#go');
+  if (window.NXCaptcha) NXCaptcha.init('#cap');
+  function needCap() { if (window.NXCaptcha && NXCaptcha.required() && !NXCaptcha.token()) { say('Completa la verificación de seguridad (no soy un robot).'); busy(false); return true; } return false; }
 
   var ICONS = {
     google: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.46a5.52 5.52 0 0 1-2.4 3.62v3h3.88c2.27-2.09 3.56-5.17 3.56-8.81z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.94-2.91l-3.88-3c-1.07.72-2.45 1.15-4.06 1.15-3.12 0-5.77-2.11-6.71-4.95H1.28v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.29 14.29a7.2 7.2 0 0 1 0-4.58v-3.1H1.28a12 12 0 0 0 0 10.78z"/><path fill="#EA4335" d="M12 4.75c1.76 0 3.34.61 4.58 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.28 6.61l4.01 3.1C6.23 6.86 8.88 4.75 12 4.75z"/></svg>',
@@ -62,7 +64,9 @@
   function login(sb) {
     var ident = $('#ident').value.trim(), pw = $('#pw').value;
     if (!ident || !pw) { say('Completa usuario y contraseña.'); return busy(false); }
-    return post('/api/login', { identifier: ident, password: pw }).then(function (r) {
+    if (needCap()) return;
+    return post('/api/login', { identifier: ident, password: pw, captcha: window.NXCaptcha ? NXCaptcha.token() : null }).then(function (r) {
+      if (window.NXCaptcha) NXCaptcha.reset();
       if (!r.ok) { say(r.d.error || 'No se pudo iniciar sesión.'); return busy(false); }
       return sb.auth.setSession({ access_token: r.d.access_token, refresh_token: r.d.refresh_token }).then(function (s) {
         if (s.error) { say('No se pudo iniciar sesión.'); return busy(false); }
@@ -78,10 +82,12 @@
     if (!/^\S+@\S+\.\S+$/.test(email)) { say('Escribe un correo válido.'); return busy(false); }
     if (pw.length < 8) { say('La contraseña debe tener al menos 8 caracteres.'); return busy(false); }
     if (pw !== pw2) { say('Las contraseñas no coinciden.'); return busy(false); }
+    if (needCap()) return;
     return fetch('/api/username?u=' + encodeURIComponent(user)).then(function (r) { return r.ok ? r.json() : null; }).then(function (a) {
       if (!a) { say('El servicio de cuentas no está disponible ahora. Intenta más tarde.'); return busy(false); }
       if (!a.available) { say('Ese nombre de usuario ya está en uso.'); return busy(false); }
-      return sb.auth.signUp({ email: email, password: pw, options: { data: { username: user, country: country }, emailRedirectTo: location.origin + '/' } }).then(function (r) {
+      return sb.auth.signUp({ email: email, password: pw, options: { data: { username: user, country: country }, emailRedirectTo: location.origin + '/', captchaToken: window.NXCaptcha ? (NXCaptcha.token() || undefined) : undefined } }).then(function (r) {
+        if (window.NXCaptcha) NXCaptcha.reset();
         if (r.error) { say(r.error.message && /registered|exists/i.test(r.error.message) ? 'Ese correo ya tiene una cuenta.' : 'No se pudo crear la cuenta.'); return busy(false); }
         if (r.data.session) { location.href = '/'; return; }
         say('Cuenta creada. Revisa tu correo para confirmarla.', true);
@@ -96,7 +102,9 @@
     if (!/^\S+@\S+\.\S+$/.test(v)) return say('Escribe tu correo arriba y vuelve a tocar este enlace.');
     window.NX.ready.then(function (o) {
       if (!o.sb) return say('El servicio de cuentas no está disponible todavía.');
-      o.sb.auth.resetPasswordForEmail(v, { redirectTo: location.origin + '/' }).then(function () {
+      if (needCap()) return;
+      o.sb.auth.resetPasswordForEmail(v, { redirectTo: location.origin + '/', captchaToken: window.NXCaptcha ? (NXCaptcha.token() || undefined) : undefined }).then(function () {
+        if (window.NXCaptcha) NXCaptcha.reset();
         say('Si el correo existe, te enviamos un enlace para restablecerla.', true);
       });
     });

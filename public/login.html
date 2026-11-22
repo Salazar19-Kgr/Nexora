@@ -19,6 +19,7 @@
       <form id="f" novalidate>
         <div class="field"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-mail"/></svg><input id="ident" type="text" placeholder="Correo electrónico o usuario" autocomplete="username" autocapitalize="none" required aria-label="Correo electrónico o usuario"></div>
         <div class="field"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-lock"/></svg><input id="pw" type="password" placeholder="Contraseña" autocomplete="current-password" required aria-label="Contraseña"><button class="eye" type="button" data-eye="pw" aria-label="Mostrar contraseña"><svg class="ic" viewBox="0 0 24 24"><use href="#i-eye"/></svg></button></div>
+        <div id="cap" class="cap"></div>
         <p id="msg" class="msg" role="status"></p>
         <button id="go" class="btn block" type="submit">Iniciar sesión <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></button>
       </form>
@@ -31,6 +32,7 @@
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="/js/chrome.js"></script>
+<script src="/js/captcha.js"></script>
 <script src="/js/auth.js"></script>
 </body>
 </html>
