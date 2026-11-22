@@ -82,6 +82,14 @@ const PG_MSG = {
   referencia_usada: [409, "Esa referencia ya fue usada en otro pago."],
   comprobante_no_pendiente: [409, "Ese comprobante ya fue revisado."],
   accion_invalida: [400, "Acción no válida."],
+  monto_invalido: [400, "Elige una recarga de 5, 10, 20 o 50 dólares."],
+  metodo_no_disponible: [404, "Ese método de pago no está disponible."],
+  demasiadas_recargas: [429, "Ya tienes 3 recargas en revisión. Espera a que las aprobemos."],
+  referencia_repetida: [409, "Esa referencia ya fue usada en otra recarga."],
+  recarga_no_existe: [404, "Recarga no encontrada."],
+  recarga_decidida: [409, "Esa recarga ya fue revisada."],
+  saldo_insuficiente: [402, "No tienes saldo suficiente para este pedido."],
+  pedido_no_pagable: [409, "Este pedido ya no se puede pagar."],
   reembolso_pendiente: [409, "Ya hay una solicitud de reembolso pendiente para este pedido."],
   reembolso_decidido: [409, "Esa solicitud ya fue resuelta."],
   misma_persona: [403, "Otra persona debe aprobar o rechazar tu solicitud de reembolso."],
@@ -774,6 +782,66 @@ async function refundDecide(env, ctx, id, action) {
   return json({ result: r });
 }
 
+// ---------- Saldo: recargas de 5/10/20/50 $ (las aprueba el equipo) y pago de pedidos con saldo ----------
+async function topupCreate(env, request) {
+  const user = await needUser(env, request);
+  limit(`topup:${user.id}`, 6, 60000);
+  const b = await readBody(request);
+  const amount = Number(b.amount);
+  if (![5, 10, 20, 50].includes(amount)) throw bad("Elige una recarga de 5, 10, 20 o 50 dólares.");
+  const reference = coerce({ t: "text", label: "Referencia", req: true, upper: true, max: 64, re: /^[A-Z0-9._-]{4,64}$/ }, b.reference);
+  const r = await rpc(env, "topup_create", { p_user: user.id, p_amount: amount, p_method: uuidOrFail(b.method_id), p_ref: reference });
+  return json(r, 201);
+}
+
+async function topupsMine(env, request) {
+  const user = await needUser(env, request);
+  const rows = await sb(env, `topups?user_id=eq.${user.id}&select=id,amount_usd,reference,status,reject_reason,created_at&order=created_at.desc&limit=20`, { service: true });
+  return json(rows);
+}
+
+async function topupAmount(env, request, url) {
+  // Cuánto debe enviar el cliente en la moneda del método (VES/DOP/MXN se convierten con la tasa vigente).
+  const user = await needUser(env, request);
+  const amount = Number(url.searchParams.get("amount"));
+  const cur = String(url.searchParams.get("currency") || "USD");
+  if (![5, 10, 20, 50].includes(amount)) throw bad("Monto no válido.");
+  const rate = RATE_CUR.includes(cur) ? await latestRate(env, cur) : 1;
+  if (!rate) throw bad("Aún no hay tasa para esa moneda.", 409);
+  return json({ amount_usd: amount, currency: cur, pay: money(amount * rate) });
+}
+
+async function topupsList(env, ctx) {
+  need(ctx, "payments.write");
+  const rows = await sb(env,
+    `topups?status=eq.pending&select=${encodeURIComponent("id,user_id,amount_usd,reference,created_at,payment_methods(name,kind,currency)")}&order=created_at.asc&limit=100`,
+    { service: true });
+  const ids = [...new Set(rows.map((r) => r.user_id))];
+  let names = new Map();
+  if (ids.length) {
+    const ps = await sb(env, `profiles?id=in.(${ids.join(",")})&select=id,username`, { service: true });
+    names = new Map(ps.map((p) => [p.id, p.username]));
+  }
+  return json({ rows: rows.map((r) => ({ ...r, username: names.get(r.user_id) || null })) });
+}
+
+async function topupDecide(env, ctx, id, action, body) {
+  need(ctx, "payments.write");
+  id = uuidOrFail(id);
+  if (!["approve", "reject"].includes(action)) throw bad("Acción no válida.");
+  const reason = action === "reject" ? String((body && body.reason) || "").slice(0, 200) || null : null;
+  const r = await rpc(env, "topup_decide", { p_id: id, p_actor: ctx.user.id, p_approve: action === "approve", p_reason: reason });
+  await audit(env, ctx.user.id, `topup.${action}`, "topups", id, null, { amount_usd: r.amount_usd });
+  return json(r);
+}
+
+async function payBalance(env, request, id) {
+  const user = await needUser(env, request);
+  limit(`paybal:${user.id}`, 10, 60000);
+  const r = await rpc(env, "pay_with_balance", { p_user: user.id, p_order: uuidOrFail(id) });
+  return json(r);
+}
+
 async function orderPayment(env, ctx, id, body) {
   need(ctx, "payments.write");
   id = uuidOrFail(id);
@@ -907,6 +975,8 @@ async function admin(env, request, url) {
   }
   if (a === "stats" && m === "GET") return stats(env, ctx);
   if (a === "games" && b && c === "icon" && m === "POST") return gameIcon(env, ctx, b, request);
+  if (a === "topups" && !b && m === "GET") return topupsList(env, ctx);
+  if (a === "topups" && b && c && m === "POST") return topupDecide(env, ctx, b, c, await readBody(request).catch(() => ({})));
   if (a === "refunds" && !b && m === "GET") return refundsList(env, ctx);
   if (a === "refunds" && b && c && m === "POST") return refundDecide(env, ctx, b, c);
   if (a === "provider" && !b && m === "GET") return providerInfo(env, ctx);
@@ -1256,6 +1326,11 @@ export default {
       const op = p.match(/^\/api\/orders\/([0-9a-f-]{36})(\/proof)?$/i);
       if (op && !op[2] && m === "GET") return await myOrder(env, request, op[1]);
       if (op && op[2] && m === "POST") return await submitProof(env, request, op[1]);
+      const pb = p.match(/^\/api\/orders\/([0-9a-f-]{36})\/pay-balance$/i);
+      if (pb && m === "POST") { const r = await payBalance(env, request, pb[1]); if (r.ok) kick(ectx, env); return r; }
+      if (p === "/api/topups" && m === "POST") return await topupCreate(env, request);
+      if (p === "/api/topups" && m === "GET") return await topupsMine(env, request);
+      if (p === "/api/topups/amount" && m === "GET") return await topupAmount(env, request, url);
       if (p === "/api/login" && m === "POST") return await login(env, request);
       if (p === "/api/ceo/status" && m === "GET") return await ceoStatus(env);
       if (p === "/api/ceo/register" && m === "POST") return await ceoRegister(env, request);

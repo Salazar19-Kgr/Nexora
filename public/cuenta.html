@@ -31,6 +31,22 @@
       <div class="stat"><b id="spn">0</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bolt"/></svg>Giros</span></div>
     </div>
 
+    <h2 id="saldo">Recargar saldo</h2>
+    <div class="card" id="topup">
+      <p class="muted">Recarga saldo (5, 10, 20 o 50 dólares). Lo aprobamos a mano y luego pagas tus pedidos con un toque.</p>
+      <div class="fchips" id="tamts" role="group" aria-label="Monto"></div>
+      <div class="plist" id="tmeth" role="group" aria-label="Método de pago"></div>
+      <form id="tform" novalidate>
+        <div id="tpay" hidden>
+          <p class="note" id="tdue"></p>
+          <p class="muted" id="tins"></p>
+          <input id="tref" maxlength="64" placeholder="Referencia de tu pago" autocomplete="off" aria-label="Referencia">
+          <button class="btn block" type="submit" id="tsend">Ya pagué, acreditar mi saldo</button>
+        </div>
+      </form>
+      <p id="tmsg" class="msg" role="status"></p>
+      <div id="tlist"></div>
+    </div>
     <h2 id="recompensas">Recompensas</h2>
     <div class="rw">
       <div class="card">
@@ -64,5 +80,6 @@
 <script src="/js/art.js"></script>
 <script src="/js/account.js"></script>
 <script src="/js/rewards.js"></script>
+<script src="/js/saldo.js"></script>
 </body>
 </html>

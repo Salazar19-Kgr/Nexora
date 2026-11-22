@@ -84,8 +84,24 @@
   function poll() { timer = setTimeout(function () { load(false); }, 6000); }
 
   function loadMethods() {
-    NXApi('/api/payment-methods', null, token).then(function (m) { methods = m; drawMethods(); })
+    NXApi('/api/payment-methods', null, token).then(function (m) { methods = m; drawMethods(); balPay(); })
       .catch(function (e) { say(e.message); });
+  }
+  function balPay() {
+    var bx = $('#balpay'); if (!bx) return;
+    NXApi('/api/me', null, token).then(function (me) {
+      var bal = Number(me.balance_usd || 0), due = Number(order.amount_usd);
+      bx.replaceChildren();
+      if (!(bal >= due && due > 0)) { bx.hidden = true; return; }
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'btn block'; b.textContent = 'Pagar con saldo (' + usd(bal) + ' disponible)';
+      b.addEventListener('click', function () {
+        if (!confirm('Se descontarán ' + usd(due) + ' de tu saldo.')) return;
+        b.disabled = true; say('Pagando con saldo…', true);
+        NXApi('/api/orders/' + oid + '/pay-balance', { method: 'POST' }, token).then(function () { say(''); load(false); })
+          .catch(function (err) { b.disabled = false; say(err.message); });
+      });
+      bx.append(b); bx.hidden = false;
+    }).catch(function () {});
   }
   function drawMethods() {
     var l = $('#mlist'); l.replaceChildren(); show('#s-methods', true);

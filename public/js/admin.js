@@ -493,6 +493,28 @@
     function decide(r, a) { api('refunds/' + r.id + '/' + a, { body: {} }).then(function () { toast(a === 'approve' ? 'Reembolso aprobado' : 'Solicitud rechazada'); viewRefunds(); }).catch(function (e) { toast(e.message, true); }); }
   }
 
+  // ---------- Recargas de saldo ----------
+  function viewTopups() {
+    view.replaceChildren(h('p', { class: 'muted', text: 'Cargando…' }));
+    api('topups').then(function (d) {
+      var list = h('div', { class: 'alist' });
+      if (!d.rows.length) list.append(h('div', { class: 'empty', text: 'No hay recargas pendientes.' }));
+      d.rows.forEach(function (r) {
+        var pm = r.payment_methods || {};
+        var acts = h('div', { class: 'aact wrap2' },
+          h('button', { class: 'btn sm', text: 'Aprobar ' + usd(r.amount_usd), onclick: function () {
+            if (confirm('¿Ya viste el pago de ' + usd(r.amount_usd) + ' con referencia ' + r.reference + '? Se sumará al saldo del cliente.')) decide(r, 'approve');
+          } }),
+          h('button', { class: 'btn ghost sm', text: 'Rechazar', onclick: function () { var why = prompt('Motivo (opcional):') ; if (why !== null) decide(r, 'reject', why); } }));
+        list.append(h('div', { class: 'arow col' },
+          h('div', { class: 'otop' }, h('div', { class: 'ainfo' }, h('b', { text: (r.username || 'Cliente') + ' · ' + usd(r.amount_usd) }),
+            h('small', { text: (pm.name || 'Método') + ' · ref ' + r.reference + ' · ' + when(r.created_at) })), badge(['Pendiente', 'wait'])), acts));
+      });
+      show('Recargas de saldo', 'Revisa que el pago llegó antes de aprobar.', null, list);
+    }).catch(fail);
+    function decide(r, a, why) { api('topups/' + r.id + '/' + a, { body: { reason: why || '' } }).then(function () { toast(a === 'approve' ? 'Saldo acreditado' : 'Recarga rechazada'); viewTopups(); }).catch(function (e) { toast(e.message, true); }); }
+  }
+
   // ---------- Proveedor en el Resumen ----------
   function providerCard() {
     var box = h('div', { class: 'card' }, h('h2', { text: 'Proveedor de recargas (GamesDrop)' }), h('p', { class: 'muted', text: 'Consultando…' }));
@@ -765,6 +787,7 @@
     { id: 'resumen', label: 'Resumen', icon: 'panel', perm: 'stats', go: viewStats },
     { id: 'pedidos', label: 'Pedidos', icon: 'list', perm: 'orders.read', go: viewOrders },
     { id: 'entregas', label: 'Entregas', icon: 'bolt', perm: 'orders.read', go: viewDeliveries },
+    { id: 'recargas', label: 'Recargas de saldo', icon: 'wallet', perm: 'payments.write', go: viewTopups },
     { id: 'reembolsos', label: 'Reembolsos', icon: 'wallet', perm: 'payments.write', go: viewRefunds },
     { id: 'usuarios', label: 'Usuarios', icon: 'user', perm: 'users.read', go: viewUsers },
     { id: 'juegos', label: 'Juegos', icon: 'gamepad', perm: 'catalog.read', go: function () { CFG.games.canWrite = has('catalog.write'); return manager(CFG.games); } },

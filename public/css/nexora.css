@@ -418,3 +418,14 @@ svg.coin,svg.pa:not(.ic){width:34px;height:34px}
 .sorts button.on{color:#04210d;background:var(--acc);border-color:var(--acc);box-shadow:0 0 14px rgba(22,217,74,.35)}
 /* Nombre en estilo gamer: degradado neón con brillo */
 .wm{font-style:normal;font-weight:900;letter-spacing:.2em;background:linear-gradient(90deg,#fff 0%,#9dffb8 55%,#16D94A 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 8px rgba(22,217,74,.45))}
+
+#topup .fchips{margin:10px 0}
+#topup .chip{min-width:64px}
+#topup .chip.on,#topup .mrow.on{border-color:var(--hi);box-shadow:0 0 0 2px rgba(22,217,74,.25)}
+#topup #tpay{margin-top:12px;display:grid;gap:10px}
+#topup #tpay[hidden]{display:none}
+#topup input{height:50px;padding:0 14px;border-radius:12px;border:1px solid var(--line2);background:#060b08;outline:0;color:inherit;text-transform:uppercase}
+#topup .trow{font-size:.85rem;color:var(--tx2);margin:6px 0 0}
+#topup .t-approved{color:var(--hi)}
+#topup .t-rejected{color:#ff7a7a}
+.balpay{margin:0 0 12px}
