@@ -517,6 +517,7 @@
 
   // ---------- Verificación en 2 pasos (app autenticadora) ----------
   function mfaFactors() {
+    if (!sb.auth || !sb.auth.mfa) return Promise.reject(new Error('mfa'));
     return sb.auth.mfa.listFactors().then(function (r) {
       var all = (r.data && r.data.all) || [];
       return { ok: all.filter(function (f) { return f.factor_type === 'totp' && f.status === 'verified'; })[0] || null, stale: all.filter(function (f) { return f.factor_type === 'totp' && f.status !== 'verified'; }) };
@@ -613,34 +614,185 @@
   }
 
   // ---------- Resumen ----------
+  // ---------- Movimiento, gráficas y detalles (micro-interacciones) ----------
+  var REDUCE = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  var NSVG = 'http://www.w3.org/2000/svg';
+  function sv(n, a) { var e = document.createElementNS(NSVG, n); for (var k in (a || {})) e.setAttribute(k, a[k]); return e; }
+  function stagger(root, sel) { Array.prototype.forEach.call(root.querySelectorAll(sel), function (e, i) { e.style.setProperty('--i', i); }); }
+  function fmtN(kind, v) {
+    if (kind === 'usd') return '$' + Number(v).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return Math.round(v).toLocaleString('es-VE');
+  }
+  function countUp(el) {
+    var to = Number(el.dataset.count || 0), kind = el.dataset.fmt || 'int';
+    if (REDUCE || !isFinite(to) || to === 0) { el.textContent = fmtN(kind, to); return; }
+    var t0 = null, dur = 1100;
+    function step(t) {
+      if (t0 === null) t0 = t;
+      var k = Math.min(1, (t - t0) / dur), e = k === 1 ? 1 : 1 - Math.pow(2, -10 * k);
+      el.textContent = fmtN(kind, to * e);
+      if (k < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  function num(kind, v, cls) { return h('span', { class: cls || 'big', 'data-count': String(v || 0), 'data-fmt': kind, text: fmtN(kind, 0) }); }
+  // Onda al tocar un botón y luz que sigue al dedo o al mouse
+  document.addEventListener('pointerdown', function (e) {
+    var b = e.target.closest && e.target.closest('.btn');
+    if (!b || b.disabled || REDUCE) return;
+    var r = b.getBoundingClientRect(), d = Math.max(r.width, r.height), x = h('span', { class: 'rip' });
+    x.style.cssText = 'width:' + d + 'px;height:' + d + 'px;left:' + (e.clientX - r.left - d / 2) + 'px;top:' + (e.clientY - r.top - d / 2) + 'px';
+    b.append(x); setTimeout(function () { x.remove(); }, 650);
+  });
+  document.addEventListener('pointermove', function (e) {
+    var c = e.target.closest && e.target.closest('.spot'); if (!c) return;
+    var r = c.getBoundingClientRect(); c.style.setProperty('--mx', (e.clientX - r.left) + 'px'); c.style.setProperty('--my', (e.clientY - r.top) + 'px');
+  });
+
+  function areaChart(daily) {
+    var W = 320, H = 130, P = { l: 6, r: 6, t: 14, b: 20 }, vals = daily.map(function (d) { return Number(d.usd) || 0; });
+    var max = Math.max.apply(null, vals.concat([1])), n = vals.length;
+    var X = function (i) { return P.l + (W - P.l - P.r) * (n === 1 ? 0.5 : i / (n - 1)); };
+    var Y = function (v) { return P.t + (H - P.t - P.b) * (1 - v / max); };
+    var svg = sv('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': 'Ventas de los últimos 14 días' });
+    var defs = sv('defs'), g1 = sv('linearGradient', { id: 'gline', x1: 0, x2: 1, y1: 0, y2: 0 }), g2 = sv('linearGradient', { id: 'garea', x1: 0, x2: 0, y1: 0, y2: 1 });
+    g1.append(sv('stop', { offset: 0, 'stop-color': '#22d3ee' }), sv('stop', { offset: 1, 'stop-color': '#5cff7a' }));
+    g2.append(sv('stop', { offset: 0, 'stop-color': '#16D94A', 'stop-opacity': .35 }), sv('stop', { offset: 1, 'stop-color': '#16D94A', 'stop-opacity': 0 }));
+    defs.append(g1, g2); svg.append(defs);
+    [0.25, 0.5, 0.75].forEach(function (f) { var y = P.t + (H - P.t - P.b) * f; svg.append(sv('line', { class: 'grid', x1: P.l, x2: W - P.r, y1: y, y2: y })); });
+    var d = 'M' + X(0) + ' ' + Y(vals[0]);
+    for (var i = 1; i < n; i++) { var cx = (X(i - 1) + X(i)) / 2; d += ' C' + cx + ' ' + Y(vals[i - 1]) + ' ' + cx + ' ' + Y(vals[i]) + ' ' + X(i) + ' ' + Y(vals[i]); }
+    svg.append(sv('path', { class: 'ar', d: d + ' L' + X(n - 1) + ' ' + (H - P.b) + ' L' + X(0) + ' ' + (H - P.b) + ' Z' }));
+    var line = sv('path', { class: 'ln', d: d }); svg.append(line);
+    var tip = h('div', { class: 'tip' }), box = h('div', { class: 'chart' }), dots = [];
+    vals.forEach(function (v, i) {
+      var dot = sv('circle', { class: 'dot', cx: X(i), cy: Y(v), r: 4 }); dots.push(dot); svg.append(dot);
+      var w = (W - P.l - P.r) / Math.max(1, n - 1);
+      var hit = sv('rect', { class: 'hit', x: X(i) - w / 2, y: 0, width: w, height: H });
+      function on() {
+        dots.forEach(function (x) { x.classList.remove('on'); }); dot.classList.add('on');
+        var dt = new Date(daily[i].d + 'T12:00:00');
+        tip.replaceChildren(h('b', { text: usd(v) }), ' · ' + dt.toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }) + ' · ' + daily[i].n + ' pedidos');
+        tip.style.left = (X(i) / W * 100) + '%'; tip.style.top = (Y(v) / H * 100) + '%'; tip.classList.add('on');
+      }
+      hit.addEventListener('pointerenter', on); hit.addEventListener('pointerdown', on);
+      svg.append(hit);
+    });
+    [0, n - 1].forEach(function (i) {
+      var dt = new Date(daily[i].d + 'T12:00:00');
+      var tx = sv('text', { class: 'lbl', x: X(i), y: H - 4, 'text-anchor': i === 0 ? 'start' : 'end' });
+      tx.textContent = dt.toLocaleDateString('es-VE', { day: 'numeric', month: 'short' }); svg.append(tx);
+    });
+    svg.addEventListener('pointerleave', function () { tip.classList.remove('on'); dots.forEach(function (x) { x.classList.remove('on'); }); });
+    box.append(svg, tip);
+    setTimeout(function () { try { var L = Math.ceil(line.getTotalLength()); line.style.setProperty('--len', L); } catch (e) {} }, 0);
+    line.style.setProperty('--len', 900);
+    return box;
+  }
+
+  function donut(by) {
+    var groups = [
+      ['Completados', ['completed'], '#16D94A'], ['Por entregar', ['paid', 'delivering'], '#22d3ee'],
+      ['Por pagar', ['pending', 'awaiting_review'], '#ffd24a'], ['Cancelados', ['rejected', 'refunded', 'disputed'], '#ff5d6c']
+    ].map(function (g) { return { n: g[0], c: g[2], v: g[1].reduce(function (a, k) { return a + Number(by[k] || 0); }, 0) }; });
+    var total = groups.reduce(function (a, g) { return a + g.v; }, 0), R = 52, C = 2 * Math.PI * R;
+    var svg = sv('svg', { viewBox: '0 0 132 132', role: 'img', 'aria-label': 'Pedidos por estado' });
+    svg.append(sv('circle', { cx: 66, cy: 66, r: R, fill: 'none', stroke: 'rgba(255,255,255,.06)', 'stroke-width': 14 }));
+    var off = 0, segs = [], leg = h('div', { class: 'leg' });
+    groups.forEach(function (g, i) {
+      var len = total ? C * g.v / total : 0, c = sv('circle', { class: 'sg', cx: 66, cy: 66, r: R, stroke: g.c, 'stroke-dasharray': '0 ' + C, 'stroke-dashoffset': -off });
+      svg.append(c); segs.push([c, len]); off += len;
+      var row = h('div', null, h('i', { style: 'background:' + g.c }), g.n, h('span', { text: String(g.v) }));
+      row.addEventListener('pointerenter', function () { segs.forEach(function (s2, j) { s2[0].style.opacity = j === i ? 1 : .25; }); });
+      row.addEventListener('pointerleave', function () { segs.forEach(function (s2) { s2[0].style.opacity = 1; }); });
+      leg.append(row);
+    });
+    requestAnimationFrame(function () { requestAnimationFrame(function () { segs.forEach(function (s2) { s2[0].setAttribute('stroke-dasharray', Math.max(0, s2[1] - (total ? 2 : 0)) + ' ' + C); }); }); });
+    var mid = h('div', { class: 'mid' }, h('div', null, num('int', total, 'cnt'), h('small', { text: 'pedidos' })));
+    mid.firstChild.firstChild.style.cssText = 'font-size:1.5rem;font-weight:800;display:block';
+    return h('div', { class: 'donut' }, h('div', { class: 'dwrap' }, svg, mid), leg);
+  }
+
+  var NAVMAP = { comprobantes: 'proofs', recargas: 'topups', reembolsos: 'refunds', entregas: 'deliveries' };
+  function paintBadges(s) {
+    var pend = (s && s.overview && s.overview.pending) || {}, counts = { pedidos: s ? Number(s.orders_pending || 0) : 0 };
+    Object.keys(NAVMAP).forEach(function (k) { counts[k] = Number(pend[NAVMAP[k]] || 0); });
+    Array.prototype.forEach.call(nav.children, function (a) {
+      var c = counts[a.dataset.id] || 0, bd = a.querySelector('.bd');
+      if (!c) { if (bd) bd.remove(); return; }
+      if (!bd) { bd = h('span', { class: 'bd' }); a.append(bd); }
+      if (bd.textContent !== String(c)) { bd.textContent = String(c); bd.style.animation = 'none'; void bd.offsetWidth; bd.style.animation = ''; }
+    });
+  }
+  var _pb = paintBadges; paintBadges = function (s) { _pb(s); paintDock(); };
+  function skeleton() { return h('div', { class: 'skgrid' }, [1, 2, 3, 4, 5].map(function () { return h('div', { class: 'sk' }); })); }
+
   function viewStats() {
-    view.replaceChildren(h('p', { class: 'muted', text: 'Cargando…' }));
+    view.replaceChildren(skeleton());
     return api('stats').then(function (s) {
-      var k = [
-        ['Usuarios', s.users], ['Por atender', s.orders_pending], ['Pagados por entregar', s.orders_paid], ['Completados', s.orders_completed],
-        ['Ingresos 30 días', usd(s.revenue_30d_usd)], ['Ingresos totales', usd(s.revenue_usd)], ['Juegos activos', s.games_active], ['Paquetes activos', s.products_active],
-        ['USD → Bs', s.rates && s.rates.VES ? Number(s.rates.VES.rate).toLocaleString('es-VE', { maximumFractionDigits: 2 }) : 'Sin tasa'],
-        ['USD → RD$', s.rates && s.rates.DOP ? Number(s.rates.DOP.rate).toLocaleString('es-VE', { maximumFractionDigits: 2 }) : 'Sin tasa'],
-        ['USD → MX$', s.rates && s.rates.MXN ? Number(s.rates.MXN.rate).toLocaleString('es-VE', { maximumFractionDigits: 2 }) : 'Sin tasa']
-      ];
-      var body = h('div', null,
-        h('div', { class: 'kpis' }, k.map(function (x) { return h('div', { class: 'kpi' }, h('b', { text: String(x[1]) }), h('span', { text: x[0] })); })),
-        h('p', { class: 'muted small', text: 'Ingresos = pedidos pagados, en entrega o completados.' }));
-      body.append(providerCard());
-      body.append(securityCard());
-      if (!s.products_active) body.append(h('p', { class: 'note', text: 'Todavía no hay paquetes activos, así que la tienda no muestra nada que comprar. Ve a “Precios” y activa tus paquetes.' }));
+      paintBadges(s);
+      var ov = s.overview || null, pend = (ov && ov.pending) || {}, root = h('div', null), g = 0;
+      var todoN = Number(s.orders_pending || 0) + Number(pend.proofs || 0) + Number(pend.topups || 0) + Number(pend.refunds || 0) + Number(pend.deliveries || 0);
+      var first = null;
+      [['comprobantes', pend.proofs], ['recargas', pend.topups], ['reembolsos', pend.refunds], ['entregas', pend.deliveries], ['pedidos', s.orders_pending]].forEach(function (x) { if (!first && Number(x[1] || 0) > 0 && allowed.some(function (a) { return a.id === x[0]; })) first = x[0]; });
+      var hello = (me && me.username) || 'equipo';
+      root.append(h('div', { class: 'hero rise' },
+        h('span', { class: 'live' }, h('i'), 'En vivo'),
+        h('h2', null, 'Hola, ', h('em', { text: hello })),
+        h('p', { text: todoN ? ('Tienes ' + todoN + (todoN === 1 ? ' cosa' : ' cosas') + ' por atender ahora mismo.') : 'Todo al día. Nada pendiente por ahora.' }),
+        first ? h('a', { class: 'btn sm', href: '#' + first, text: 'Ir a lo pendiente' }) : null));
+
+      var todo = h('div', { class: 'todo', style: 'margin-top:12px' });
+      [['comprobantes', 'Comprobantes', pend.proofs], ['recargas', 'Recargas de saldo', pend.topups], ['reembolsos', 'Reembolsos', pend.refunds], ['entregas', 'Entregas con problema', pend.deliveries]].forEach(function (x) {
+        if (!allowed.some(function (a) { return a.id === x[0]; })) return;
+        var n = Number(x[2] || 0);
+        todo.append(h('a', { href: '#' + x[0], class: 'rise' + (n ? ' hot' : ' zero') }, num('int', n, 'cnt'), h('span', { text: x[1] })));
+      });
+      if (todo.children.length) root.append(todo);
+
+      var bento = h('div', { class: 'bento', style: 'margin-top:12px' });
+      var daily = ov && ov.daily && ov.daily.length ? ov.daily : null;
+      var sum14 = daily ? daily.reduce(function (a, d) { return a + Number(d.usd || 0); }, 0) : 0;
+      bento.append(h('div', { class: 'tile spot w2 rise' }, h('h3', { text: 'Ventas · 14 días' }), num('usd', daily ? sum14 : s.revenue_30d_usd, 'big g'),
+        h('small', { text: daily ? 'Pedidos pagados, en entrega o completados' : 'Últimos 30 días' }), daily ? areaChart(daily) : null));
+      bento.append(h('div', { class: 'tile spot w2 rise' }, h('h3', { text: 'Pedidos por estado' }), ov && ov.by_status ? donut(ov.by_status) : h('p', { class: 'muted', text: 'Ejecuta la migración 0015 en Supabase para ver esta gráfica.' })));
+      [['Usuarios', s.users, 'int', 'user'], ['Ingresos totales', s.revenue_usd, 'usd', 'wallet'], ['Por entregar', s.orders_paid, 'int', 'bolt'], ['Completados', s.orders_completed, 'int', 'shield'],
+       ['Juegos activos', s.games_active, 'int', 'gamepad'], ['Paquetes activos', s.products_active, 'int', 'list']].forEach(function (x) {
+        bento.append(h('div', { class: 'tile spot rise' }, h('span', { class: 'ico' }, icon(x[3])), h('h3', { text: x[0] }), num(x[2], x[1])));
+      });
+      root.append(bento);
+
+      if (ov && ov.recent && ov.recent.length) {
+        var feed = h('div', { class: 'feed' });
+        ov.recent.forEach(function (o) {
+          var st = ES.status[o.status] || [o.status, 'wait'];
+          feed.append(h('a', { href: '#pedidos' }, h('span', { class: 'av' }, icon('bolt')),
+            h('span', { class: 'tx' }, h('b', { text: (o.game || 'Juego') + ' · ' + (o.product || 'Paquete') }), h('small', { text: when(o.created_at) + (o.country ? ' · ' + o.country : '') })),
+            h('span', { class: 'am', text: usd(o.amount_usd) }), badge(st)));
+        });
+        root.append(h('div', { class: 'card spot rise', style: 'margin-top:12px' }, h('h2', { text: 'Actividad reciente' }), feed));
+      }
+
+      root.append(h('h2', { class: 'rise', style: 'margin:22px 0 0;font-size:1.05rem;color:var(--tx2);letter-spacing:.08em;text-transform:uppercase', text: 'Sistema' }));
+      root.append(providerCard());
+      root.append(securityCard());
+      if (!s.products_active) root.append(h('p', { class: 'note', text: 'Todavía no hay paquetes activos, así que la tienda no muestra nada que comprar. Ve a “Precios” y activa tus paquetes.' }));
       if (has('rates.write')) {
+        var rt = s.rates || {}, fm = function (q) { return rt[q] ? Number(rt[q].rate).toLocaleString('es-VE', { maximumFractionDigits: 2 }) : 'Sin tasa'; };
         var qsel = h('select', { 'aria-label': 'Moneda de la tasa' }, [['VES', 'Bolívares (Venezuela)'], ['DOP', 'Pesos dominicanos (R. Dominicana)'], ['MXN', 'Pesos mexicanos (México)']].map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
         var inp = h('input', { type: 'number', step: '0.01', min: '0', placeholder: 'Unidades por 1 USD', 'aria-label': 'Tasa por 1 USD' });
         var msg = h('p', { class: 'msg', role: 'status' });
-        body.append(h('div', { class: 'card' }, h('h2', { text: 'Tasas del día' }),
+        root.append(h('div', { class: 'card spot rise' }, h('h2', { text: 'Tasas del día' }),
+          h('div', { class: 'chips' }, [h('span', { class: 'chip', text: 'USD→Bs ' + fm('VES') }), h('span', { class: 'chip', text: 'USD→RD$ ' + fm('DOP') }), h('span', { class: 'chip', text: 'USD→MX$ ' + fm('MXN') })]),
           h('p', { text: 'Cada pedido guarda la tasa que había al crearse. Panamá y Estados Unidos pagan en dólares y no necesitan tasa.' }), qsel, inp, msg,
           h('button', { class: 'btn sm', text: 'Guardar tasa', onclick: function () {
             msg.textContent = '';
             api('rate', { body: { quote: qsel.value, rate: inp.value } }).then(function () { toast('Tasa guardada'); viewStats(); }).catch(function (e) { msg.textContent = e.message; });
           } })));
       }
-      show('Resumen', 'Cómo va NEXORA.', null, body);
+      view.replaceChildren(h('div', { class: 'ahead' }, h('div', null, h('h1', { text: 'Resumen' }), h('p', { class: 'muted', text: 'Cómo va NEXORA, en vivo.' }))), root);
+      stagger(root, '.rise');
+      Array.prototype.forEach.call(root.querySelectorAll('[data-count]'), countUp);
     }).catch(fail);
   }
 
@@ -865,14 +1017,43 @@
     if (!s && allowed.length && window.matchMedia && window.matchMedia('(max-width:859px)').matches) {
       document.body.classList.add('adm-home'); document.body.classList.remove('adm-sec');
       Array.prototype.forEach.call(nav.children, function (a) { a.classList.remove('on'); });
-      view.replaceChildren(); window.scrollTo(0, 0); return;
+      window.scrollTo(0, 0);
+      var home = allowed.filter(function (x) { return x.id === 'resumen'; })[0];
+      if (home) { home.go(); enter(); } else view.replaceChildren();
+      return;
     }
     s = s || allowed[0];
     if (!s) { view.replaceChildren(h('div', { class: 'empty', text: 'Tu rol no tiene secciones disponibles.' })); return; }
     document.body.classList.remove('adm-home'); document.body.classList.add('adm-sec');
     Array.prototype.forEach.call(nav.children, function (a) { a.classList.toggle('on', a.dataset.id === s.id); });
-    s.go();
+    s.go(); enter();
   }
+  var dock = null;
+  function buildDock() {
+    if (dock) dock.remove();
+    var pick = ['resumen', 'pedidos', 'comprobantes', 'recargas', 'entregas'].filter(function (id) { return allowed.some(function (a) { return a.id === id; }); }).slice(0, 4);
+    dock = h('nav', { class: 'dock', 'aria-label': 'Accesos rápidos' });
+    pick.forEach(function (id) {
+      var sec = allowed.filter(function (a) { return a.id === id; })[0];
+      var short = { resumen: 'Inicio', pedidos: 'Pedidos', comprobantes: 'Pagos', recargas: 'Saldo', entregas: 'Entregas' }[id];
+      dock.append(h('a', { href: id === 'resumen' ? '#' : '#' + id, 'data-id': id }, icon(sec.icon), short));
+    });
+    dock.append(h('button', { type: 'button', onclick: function () {
+      var go = function () { nav.scrollIntoView({ behavior: REDUCE ? 'auto' : 'smooth', block: 'start' }); };
+      if (location.hash) { location.hash = ''; setTimeout(go, 120); } else go();
+    } }, icon('panel'), 'Más'));
+    document.body.append(dock);
+  }
+  function paintDock() {
+    if (!dock) return;
+    var id = (location.hash || '').slice(1) || 'resumen';
+    Array.prototype.forEach.call(dock.children, function (e) { e.classList.toggle('on', e.dataset && e.dataset.id === id); });
+    Array.prototype.forEach.call(dock.querySelectorAll('.bd'), function (b) { b.remove(); });
+    Array.prototype.forEach.call(dock.querySelectorAll('a'), function (a) {
+      var src = nav.querySelector('a[data-id="' + a.dataset.id + '"] .bd'); if (src) a.append(h('span', { class: 'bd', text: src.textContent }));
+    });
+  }
+  function enter() { paintDock(); view.classList.remove('enter'); void view.offsetWidth; view.classList.add('enter'); }
 
   function start() {
     allowed = SECTIONS.filter(function (s) { return has(s.perm); });
@@ -881,6 +1062,11 @@
       var a = h('a', { href: '#' + s.id, 'data-id': s.id }, icon(s.icon), s.label);
       nav.append(a);
     });
+    stagger(nav, 'a');
+    buildDock();
+    // Los avisos rojos del menú se actualizan solos cada 45 segundos mientras la pestaña está abierta.
+    function refreshBadges() { if (document.hidden || !has('stats')) return; api('stats').then(paintBadges).catch(function () {}); }
+    refreshBadges(); setInterval(refreshBadges, 45000);
     window.addEventListener('hashchange', route);
     var bk = document.getElementById('aback');
     if (bk) bk.addEventListener('click', function () { location.hash = ''; });

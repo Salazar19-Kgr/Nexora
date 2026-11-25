@@ -957,13 +957,14 @@ async function setRate(env, ctx, body) {
 
 async function stats(env, ctx) {
   need(ctx, "stats");
-  const [s, ...rs] = await Promise.all([
+  const [s, ov, ...rs] = await Promise.all([
     rpc(env, "admin_stats", {}),
+    rpc(env, "admin_overview", {}).catch(() => null), // si falta la migración 0015, el panel igual abre sin gráficas
     ...RATE_CUR.map((q) => sb(env, `exchange_rates?quote=eq.${q}&order=fetched_at.desc&limit=1&select=rate,fetched_at`, { service: true })),
   ]);
   const rates = {};
   RATE_CUR.forEach((q, i) => { rates[q] = rs[i][0] || null; });
-  return json({ ...s, rate: rates.VES, rates });
+  return json({ ...s, ...(ov ? { overview: ov } : {}), rate: rates.VES, rates });
 }
 
 async function auditList(env, ctx) {
