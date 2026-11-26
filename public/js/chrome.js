@@ -55,8 +55,8 @@
     '<p class="d">Tu ecosistema gaming: recargas de juegos, productos digitales y herramientas de IA.</p>' +
     '<details><summary>Soporte</summary><p><a href="' + WA + '" target="_blank" rel="noopener">WhatsApp: +58 424 5095002</a></p><p><a href="mailto:prds33735435@gmail.com">prds33735435@gmail.com</a></p></details>' +
     '<details><summary>Métodos de pago</summary><p>Los métodos disponibles se muestran al pagar tu pedido: pago móvil, transferencia, Zelle, USDT y más.</p></details>' +
-    '<h3 class="sig">Contáctanos</h3>' +
-    '<div class="social"><a href="' + WA + '" target="_blank" rel="noopener" aria-label="WhatsApp">' + ic('chat') + '</a><a href="mailto:prds33735435@gmail.com" aria-label="Correo">' + ic('mail') + '</a></div>' +
+    '<div class="contact"><h3 class="sig">Contáctanos</h3>' +
+    '<div class="social"><a href="' + WA + '" target="_blank" rel="noopener" aria-label="WhatsApp">' + ic('chat') + '</a><a href="mailto:prds33735435@gmail.com" aria-label="Correo">' + ic('mail') + '</a></div></div>' +
     '<p class="legalrow"><a href="/terminos">Términos</a> · <a href="/privacidad">Privacidad</a> · <a href="/reembolsos">Reembolsos</a></p>' +
     '<p class="copy">© 2026 Nexora Ecosistem de AI. Todos los derechos reservados.</p></div></footer>';
 
