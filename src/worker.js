@@ -266,14 +266,16 @@ async function pushOne(env, v, sub) {
   const res = await fetch(sub.endpoint, { method: "POST", headers: { authorization: `vapid t=${head}.${body}.${sig}, k=${v.pub}`, ttl: "86400", urgency: "high" } });
   if (res.status === 404 || res.status === 410) await sb(env, `push_subs?id=eq.${sub.id}`, { method: "DELETE", service: true });
 }
-async function pushAll(env) {
+async function pushAll(env, userId = null) {
   try {
-    const subs = await sb(env, "push_subs?select=id,endpoint&limit=50", { service: true });
-    if (!subs.length) return;
+    const subs = await sb(env, `push_subs?select=id,endpoint&limit=50${userId ? `&user_id=eq.${userId}` : ""}`, { service: true });
+    if (!subs.length) return 0;
     const v = await vapidKeys(env);
     await Promise.all(subs.map((x) => pushOne(env, v, x).catch(() => {})));
-  } catch (e) { /* un fallo de avisos nunca debe afectar al cliente */ }
+    return subs.length;
+  } catch (e) { return 0; /* un fallo de avisos nunca debe afectar al cliente */ }
 }
+async function pushTest(env, ctx) { return json({ sent: await pushAll(env, ctx.user.id) }); }
 async function pushKey(env) { return json({ key: (await vapidKeys(env)).pub }); }
 async function pushSubscribe(env, ctx, body) {
   const ep = String((body && body.endpoint) || "");
@@ -1052,6 +1054,7 @@ async function admin(env, request, url) {
   if (a === "stats" && m === "GET") return stats(env, ctx);
   if (a === "push" && b === "key" && m === "GET") { need(ctx, "stats"); return pushKey(env); }
   if (a === "push" && b === "subscribe" && m === "POST") { need(ctx, "stats"); return pushSubscribe(env, ctx, await readBody(request)); }
+  if (a === "push" && b === "test" && m === "POST") { need(ctx, "stats"); limit(`pushtest:${ctx.user.id}`, 5, 60000); return pushTest(env, ctx); }
   if (a === "push" && b === "unsubscribe" && m === "POST") { need(ctx, "stats"); return pushUnsubscribe(env, ctx, await readBody(request)); }
   if (a === "games" && b && c === "icon" && m === "POST") return gameIcon(env, ctx, b, request);
   if (a === "topups" && !b && m === "GET") return topupsList(env, ctx);

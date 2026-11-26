@@ -4,7 +4,8 @@ self.addEventListener('activate', function (e) { e.waitUntil(self.clients.claim(
 self.addEventListener('push', function (e) {
   e.waitUntil(self.registration.showNotification('NEXORA · Panel', {
     body: 'Tienes pagos por revisar. Toca para abrir.', icon: '/img/icon-192.png', badge: '/img/icon-192.png',
-    tag: 'nx-pago', renotify: true, requireInteraction: true, vibrate: [200, 100, 200], data: { url: '/admin' }
+    tag: 'nx-pago-' + Date.now(), renotify: true, requireInteraction: true, silent: false,
+    vibrate: [400, 150, 400, 150, 700], data: { url: '/admin' }
   }));
 });
 self.addEventListener('notificationclick', function (e) {

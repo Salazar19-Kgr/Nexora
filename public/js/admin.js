@@ -589,7 +589,13 @@
           });
         }).catch(function (e) { toast(e.message || 'No se pudo', true); }).then(function () { pb.disabled = false; paintPush(); });
       });
-      paintPush(); row.append(pb);
+      var tb2 = h('button', { class: 'btn ghost', type: 'button', text: 'Enviar aviso de prueba' });
+      tb2.addEventListener('click', function () {
+        tb2.disabled = true; beep();
+        api('push/test', { body: {} }).then(function (r) { toast(r.sent ? 'Aviso enviado: cierra la app y espera unos segundos' : 'No hay teléfono activado: toca "Activar avisos con la web cerrada"', !r.sent); })
+          .catch(function (e) { toast(e.message, true); }).then(function () { tb2.disabled = false; });
+      });
+      paintPush(); row.append(pb, tb2);
     }
     box.append(row, pmsg); return box;
   }
@@ -1118,11 +1124,11 @@
     // En vivo: revisa cada 10 s (solo con la pestaña visible). Si entra algo nuevo: aviso, sonido y vibración.
     var lastN = null, base = document.title;
     function pendingTotal(st) { var p = (st && st.overview && st.overview.pending) || {}; return Number(st.orders_pending || 0) + Number(p.proofs || 0) + Number(p.topups || 0) + Number(p.refunds || 0) + Number(p.deliveries || 0); }
-    function beep() { try { var C = window.AudioContext || window.webkitAudioContext, c = new C(), o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; o.frequency.value = 880; g.gain.setValueAtTime(.18, c.currentTime); g.gain.exponentialRampToValueAtTime(.001, c.currentTime + .5); o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + .5); } catch (e) {} }
+    function beep() { try { var C = window.AudioContext || window.webkitAudioContext, c = new C(); if (c.resume) c.resume(); [0, .32, .64].forEach(function (d, i) { var o = c.createOscillator(), g = c.createGain(); o.type = 'square'; o.frequency.value = i === 1 ? 1175 : 880; var t = c.currentTime + d; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(.9, t + .02); g.gain.exponentialRampToValueAtTime(.0001, t + .28); o.connect(g); g.connect(c.destination); o.start(t); o.stop(t + .3); }); } catch (e) {} }
     function alertNew(n) {
       toast('🔔 ' + n + (n === 1 ? ' pendiente nuevo' : ' pendientes nuevos'));
       if (localStorageGet('nx_snd') !== '0') beep();
-      try { if (navigator.vibrate) navigator.vibrate([120, 60, 120]); } catch (e) {}
+      try { if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 500]); } catch (e) {}
       try { if (window.Notification && Notification.permission === 'granted') new Notification('NEXORA', { body: 'Tienes pagos por revisar', tag: 'nx-new' }); } catch (e) {}
       var id = (location.hash || '').slice(1);
       if (['resumen', 'comprobantes', 'recargas', 'pedidos', ''].indexOf(id) > -1 && !document.querySelector('dialog[open], .dlg, .modal')) route();

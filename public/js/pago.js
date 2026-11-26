@@ -81,7 +81,8 @@
     else if (st === 'disputed') status('clock', 'wait', 'Pedido en revisión', 'Estamos revisando este pedido con prioridad. Escríbenos si necesitas ayuda.', link('/ajustes#soporte', 'Ir a soporte'));
     else status('back', 'bad', 'Pedido cancelado', 'Este pedido fue rechazado o cancelado.', link('/juegos', 'Hacer otro pedido'));
   }
-  function poll() { timer = setTimeout(function () { load(false); }, 6000); }
+  function poll() { timer = setTimeout(function () { load(false); }, 3000); }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && order && order.status !== 'pending' && order.status !== 'completed') { clearTimeout(timer); load(false); } });
 
   function loadMethods() {
     NXApi('/api/payment-methods', null, token).then(function (m) { methods = m; drawMethods(); balPay(); })
