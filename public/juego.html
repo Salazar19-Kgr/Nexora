@@ -26,7 +26,11 @@
       <label id="server_row" hidden>Servidor<input id="server" maxlength="64" autocomplete="off" placeholder="Ej: 2201"></label>
       <button class="btn ghost sm" type="button" id="chkid" hidden>Verificar mi ID</button>
       <p class="msg" id="idres" role="status"></p>
-      <p class="muted" id="vnote">Revisa bien tu ID: las recargas no se pueden cambiar de cuenta.</p>
+      <div class="idwarn" role="note" id="vnote">
+        <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg>
+        <div><b>Verifica bien tu ID antes de pagar</b>
+        <p>La recarga se entrega en el ID que escribas. Una vez entregada no se puede mover a otra cuenta ni reembolsar por un ID incorrecto. Revisa también el servidor, si el juego lo pide.</p></div>
+      </div>
     </div>
     <label class="trow coinrow" id="coinrow" hidden>
       <span class="tico" id="coico"></span>

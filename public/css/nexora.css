@@ -499,3 +499,9 @@ body.noscroll{overflow:hidden}
 .mrow.on .radio::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--acc);animation:pop .25s cubic-bezier(.3,1.5,.5,1)}
 @keyframes pop{from{transform:scale(0)}to{transform:scale(1)}}
 @media(prefers-reduced-motion:reduce){.sw::after,.mrow.on .radio::after,.cpn[open] input{animation:none;transition:none}}
+
+/* Aviso del ID */
+.idwarn{display:flex;gap:12px;margin:12px 0;padding:12px 14px;border-radius:14px;background:linear-gradient(120deg,rgba(255,196,60,.12),rgba(255,196,60,.04));border:1px solid rgba(255,196,60,.45)}
+.idwarn .ic{width:24px;height:24px;flex:none;color:#ffc43c;margin-top:2px}
+.idwarn b{display:block;color:#ffd777;font-size:.95rem}
+.idwarn p{margin:4px 0 0;color:var(--tx2);font-size:.84rem;line-height:1.4}
