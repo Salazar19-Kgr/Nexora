@@ -549,7 +549,7 @@
     var box = h('div', { class: 'card' }, h('h2', { text: 'Avisos de pagos nuevos' }));
     var tg = me && me.telegram;
     box.append(h('p', { class: tg ? 'muted' : 'note', text: tg ? 'Telegram conectado: te llega un mensaje cuando alguien manda un comprobante o una recarga, aunque tengas el panel cerrado.' : 'Telegram sin conectar. En Cloudflare agrega TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (te explico en el chat) para recibir avisos con el panel cerrado.' }));
-    box.append(h('p', { class: 'muted', text: 'Con el panel abierto se actualiza solo cada 10 segundos, suena y vibra.' }));
+    box.append(h('p', { class: 'muted', text: 'Con el panel abierto se actualiza solo cada 10 segundos, suena y vibra. Con el botón de abajo también te llega un aviso al teléfono con la web cerrada.' }));
     var row = h('div', { class: 'row', style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px' });
     var snd = h('button', { class: 'btn ghost', type: 'button' });
     function ps() { snd.textContent = localStorageGet('nx_snd') === '0' ? 'Sonido: apagado' : 'Sonido: encendido'; }
@@ -561,7 +561,37 @@
       nb.addEventListener('click', function () { Notification.requestPermission().then(function () { nb.remove(); }); });
       row.append(nb);
     }
-    box.append(row); return box;
+    // Avisos con la web cerrada (push). Solo para el personal del panel.
+    var pushOk = 'serviceWorker' in navigator && 'PushManager' in window && window.Notification;
+    var pmsg = h('p', { class: 'muted', style: 'margin-top:8px' });
+    if (!pushOk) {
+      pmsg.textContent = 'Este navegador no permite avisos con la web cerrada. Usa Chrome en Android (o instala el panel como app).';
+    } else {
+      var pb = h('button', { class: 'btn', type: 'button', style: 'margin-top:10px' });
+      var b64 = function (t) { t = t.replace(/-/g, '+').replace(/_/g, '/'); var r = atob(t + '==='.slice((t.length + 3) % 4)), o = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) o[i] = r.charCodeAt(i); return o; };
+      var reg = function () { return navigator.serviceWorker.register('/sw.js').then(function () { return navigator.serviceWorker.ready; }); };
+      var paintPush = function () {
+        reg().then(function (r) { return r.pushManager.getSubscription(); }).then(function (sub) {
+          pb.textContent = sub ? 'Desactivar avisos con la web cerrada' : 'Activar avisos con la web cerrada';
+          pb.className = sub ? 'btn ghost' : 'btn'; pb.dataset.on = sub ? '1' : '';
+          pmsg.textContent = sub ? 'Activados en este teléfono: te avisamos aunque el panel esté cerrado.' : 'Toca el botón y acepta el permiso de notificaciones. Hazlo en cada teléfono donde quieras recibirlos.';
+        }).catch(function () { pmsg.textContent = 'No se pudo preparar los avisos en este navegador.'; });
+      };
+      pb.addEventListener('click', function () {
+        pb.disabled = true;
+        reg().then(function (r) {
+          return r.pushManager.getSubscription().then(function (sub) {
+            if (pb.dataset.on) return sub ? api('push/unsubscribe', { body: { endpoint: sub.endpoint } }).then(function () { return sub.unsubscribe(); }).then(function () { toast('Avisos desactivados'); }) : null;
+            return Notification.requestPermission().then(function (perm) {
+              if (perm !== 'granted') throw new Error('Permiso de notificaciones denegado. Actívalo en los ajustes del navegador.');
+              return api('push/key').then(function (k) { return r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(k.key) }); });
+            }).then(function (sub) { return api('push/subscribe', { body: sub.toJSON() }).then(function () { toast('Avisos activados'); }); });
+          });
+        }).catch(function (e) { toast(e.message || 'No se pudo', true); }).then(function () { pb.disabled = false; paintPush(); });
+      });
+      paintPush(); row.append(pb);
+    }
+    box.append(row, pmsg); return box;
   }
   function securityCard() {
     var body = h('div', null, h('p', { class: 'muted', text: 'Consultando…' }));

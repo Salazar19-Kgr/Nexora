@@ -240,7 +240,55 @@ async function storageRemove(env, path, bucket = "proofs") {
 }
 
 // Aviso al Telegram del dueño (sin datos sensibles: solo que hay algo por revisar). Si no está configurado, no hace nada.
+// ---- Avisos push (Web Push sin contenido: el navegador del dueño muestra un aviso genérico) ----
+const b64u = (buf) => { let t = ""; new Uint8Array(buf).forEach((c) => (t += String.fromCharCode(c))); return btoa(t).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+const enc8 = (s) => new TextEncoder().encode(s);
+let _vapid = null;
+async function vapidKeys(env) {
+  if (_vapid) return _vapid;
+  let r = await sb(env, "push_config?id=eq.1&select=pub,jwk", { service: true });
+  if (!r.length) {
+    const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+    const jwk = await crypto.subtle.exportKey("jwk", kp.privateKey);
+    const pub = b64u(await crypto.subtle.exportKey("raw", kp.publicKey));
+    await sb(env, "push_config?on_conflict=id", { method: "POST", service: true, headers: { prefer: "resolution=ignore-duplicates,return=minimal" }, body: { id: 1, pub, jwk } });
+    r = await sb(env, "push_config?id=eq.1&select=pub,jwk", { service: true });
+  }
+  const key = await crypto.subtle.importKey("jwk", r[0].jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  _vapid = { pub: r[0].pub, key };
+  return _vapid;
+}
+async function pushOne(env, v, sub) {
+  const aud = new URL(sub.endpoint).origin;
+  const head = b64u(enc8(JSON.stringify({ typ: "JWT", alg: "ES256" })));
+  const body = b64u(enc8(JSON.stringify({ aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: "mailto:prds33735435@gmail.com" })));
+  const sig = b64u(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, v.key, enc8(`${head}.${body}`)));
+  const res = await fetch(sub.endpoint, { method: "POST", headers: { authorization: `vapid t=${head}.${body}.${sig}, k=${v.pub}`, ttl: "86400", urgency: "high" } });
+  if (res.status === 404 || res.status === 410) await sb(env, `push_subs?id=eq.${sub.id}`, { method: "DELETE", service: true });
+}
+async function pushAll(env) {
+  try {
+    const subs = await sb(env, "push_subs?select=id,endpoint&limit=50", { service: true });
+    if (!subs.length) return;
+    const v = await vapidKeys(env);
+    await Promise.all(subs.map((x) => pushOne(env, v, x).catch(() => {})));
+  } catch (e) { /* un fallo de avisos nunca debe afectar al cliente */ }
+}
+async function pushKey(env) { return json({ key: (await vapidKeys(env)).pub }); }
+async function pushSubscribe(env, ctx, body) {
+  const ep = String((body && body.endpoint) || "");
+  if (!/^https:\/\/[^\s]{10,600}$/.test(ep)) throw bad("Suscripción no válida.");
+  await sb(env, "push_subs?on_conflict=endpoint", { method: "POST", service: true, headers: { prefer: "resolution=merge-duplicates,return=minimal" }, body: { user_id: ctx.user.id, endpoint: ep } });
+  return json({ ok: true });
+}
+async function pushUnsubscribe(env, ctx, body) {
+  const ep = String((body && body.endpoint) || "");
+  if (ep) await sb(env, `push_subs?endpoint=eq.${encodeURIComponent(ep)}&user_id=eq.${ctx.user.id}`, { method: "DELETE", service: true });
+  return json({ ok: true });
+}
+
 async function notifyAdmin(env, text) {
+  await pushAll(env);
   if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return;
   try {
     await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -1002,6 +1050,9 @@ async function admin(env, request, url) {
     return json({ role: ctx.role, username: ctx.username, perms: ctx.perms.includes("*") ? ALL_PERMS : ctx.perms, mfa_enforced: mfaOn(env), telegram: !!(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) });
   }
   if (a === "stats" && m === "GET") return stats(env, ctx);
+  if (a === "push" && b === "key" && m === "GET") { need(ctx, "stats"); return pushKey(env); }
+  if (a === "push" && b === "subscribe" && m === "POST") { need(ctx, "stats"); return pushSubscribe(env, ctx, await readBody(request)); }
+  if (a === "push" && b === "unsubscribe" && m === "POST") { need(ctx, "stats"); return pushUnsubscribe(env, ctx, await readBody(request)); }
   if (a === "games" && b && c === "icon" && m === "POST") return gameIcon(env, ctx, b, request);
   if (a === "topups" && !b && m === "GET") return topupsList(env, ctx);
   if (a === "topups" && b && c && m === "POST") return topupDecide(env, ctx, b, c, await readBody(request).catch(() => ({})));
