@@ -544,6 +544,25 @@
         } }));
     }).catch(function (e) { box.replaceChildren(h('p', { class: 'note', text: 'No se pudo preparar: ' + (e.message || e) + '. En Supabase revisa Authentication → Sign In / Providers → MFA (TOTP activado).' })); });
   }
+  function localStorageGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function alertsCard() {
+    var box = h('div', { class: 'card' }, h('h2', { text: 'Avisos de pagos nuevos' }));
+    var tg = me && me.telegram;
+    box.append(h('p', { class: tg ? 'muted' : 'note', text: tg ? 'Telegram conectado: te llega un mensaje cuando alguien manda un comprobante o una recarga, aunque tengas el panel cerrado.' : 'Telegram sin conectar. En Cloudflare agrega TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID (te explico en el chat) para recibir avisos con el panel cerrado.' }));
+    box.append(h('p', { class: 'muted', text: 'Con el panel abierto se actualiza solo cada 10 segundos, suena y vibra.' }));
+    var row = h('div', { class: 'row', style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px' });
+    var snd = h('button', { class: 'btn ghost', type: 'button' });
+    function ps() { snd.textContent = localStorageGet('nx_snd') === '0' ? 'Sonido: apagado' : 'Sonido: encendido'; }
+    snd.addEventListener('click', function () { try { localStorage.setItem('nx_snd', localStorageGet('nx_snd') === '0' ? '1' : '0'); } catch (e) {} ps(); beep0(); }); ps();
+    function beep0() { if (localStorageGet('nx_snd') !== '0') { try { var C = window.AudioContext || window.webkitAudioContext, c = new C(), o = c.createOscillator(); o.frequency.value = 880; o.connect(c.destination); o.start(); o.stop(c.currentTime + .15); } catch (e) {} } }
+    row.append(snd);
+    if (window.Notification && Notification.permission !== 'granted') {
+      var nb = h('button', { class: 'btn ghost', type: 'button', text: 'Permitir avisos del navegador' });
+      nb.addEventListener('click', function () { Notification.requestPermission().then(function () { nb.remove(); }); });
+      row.append(nb);
+    }
+    box.append(row); return box;
+  }
   function securityCard() {
     var body = h('div', null, h('p', { class: 'muted', text: 'Consultando…' }));
     var box = h('div', { class: 'card' }, h('h2', { text: 'Seguridad: verificación en 2 pasos' }), body);
@@ -774,6 +793,7 @@
       }
 
       root.append(h('h2', { class: 'rise', style: 'margin:22px 0 0;font-size:1.05rem;color:var(--tx2);letter-spacing:.08em;text-transform:uppercase', text: 'Sistema' }));
+      root.append(alertsCard());
       root.append(providerCard());
       root.append(securityCard());
       if (!s.products_active) root.append(h('p', { class: 'note', text: 'Todavía no hay paquetes activos, así que la tienda no muestra nada que comprar. Ve a “Precios” y activa tus paquetes.' }));
@@ -1065,8 +1085,29 @@
     stagger(nav, 'a');
     buildDock();
     // Los avisos rojos del menú se actualizan solos cada 45 segundos mientras la pestaña está abierta.
-    function refreshBadges() { if (document.hidden || !has('stats')) return; api('stats').then(paintBadges).catch(function () {}); }
-    refreshBadges(); setInterval(refreshBadges, 45000);
+    // En vivo: revisa cada 10 s (solo con la pestaña visible). Si entra algo nuevo: aviso, sonido y vibración.
+    var lastN = null, base = document.title;
+    function pendingTotal(st) { var p = (st && st.overview && st.overview.pending) || {}; return Number(st.orders_pending || 0) + Number(p.proofs || 0) + Number(p.topups || 0) + Number(p.refunds || 0) + Number(p.deliveries || 0); }
+    function beep() { try { var C = window.AudioContext || window.webkitAudioContext, c = new C(), o = c.createOscillator(), g = c.createGain(); o.type = 'sine'; o.frequency.value = 880; g.gain.setValueAtTime(.18, c.currentTime); g.gain.exponentialRampToValueAtTime(.001, c.currentTime + .5); o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + .5); } catch (e) {} }
+    function alertNew(n) {
+      toast('🔔 ' + n + (n === 1 ? ' pendiente nuevo' : ' pendientes nuevos'));
+      if (localStorageGet('nx_snd') !== '0') beep();
+      try { if (navigator.vibrate) navigator.vibrate([120, 60, 120]); } catch (e) {}
+      try { if (window.Notification && Notification.permission === 'granted') new Notification('NEXORA', { body: 'Tienes pagos por revisar', tag: 'nx-new' }); } catch (e) {}
+      var id = (location.hash || '').slice(1);
+      if (['resumen', 'comprobantes', 'recargas', 'pedidos', ''].indexOf(id) > -1 && !document.querySelector('dialog[open], .dlg, .modal')) route();
+    }
+    function refreshBadges() {
+      if (document.hidden || !has('stats')) return;
+      api('stats').then(function (st) {
+        paintBadges(st); var n = pendingTotal(st);
+        document.title = (n ? '(' + n + ') ' : '') + base.replace(/^\(\d+\) /, '');
+        if (lastN !== null && n > lastN) alertNew(n - lastN);
+        lastN = n;
+      }).catch(function () {});
+    }
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshBadges(); });
+    refreshBadges(); setInterval(refreshBadges, 10000);
     window.addEventListener('hashchange', route);
     var bk = document.getElementById('aback');
     if (bk) bk.addEventListener('click', function () { location.hash = ''; });

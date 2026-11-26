@@ -239,6 +239,18 @@ async function storageRemove(env, path, bucket = "proofs") {
   } catch (e) { /* mejor esfuerzo */ }
 }
 
+// Aviso al Telegram del dueño (sin datos sensibles: solo que hay algo por revisar). Si no está configurado, no hace nada.
+async function notifyAdmin(env, text) {
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text, disable_web_page_preview: true }),
+    });
+  } catch (e) { /* un fallo de Telegram nunca debe afectar al cliente */ }
+}
+const tell = (ectx, env, text) => { const p = notifyAdmin(env, text); if (ectx && ectx.waitUntil) ectx.waitUntil(p); };
+
 async function submitProof(env, request, id) {
   const user = await needUser(env, request);
   id = uuidOrFail(id);
@@ -987,7 +999,7 @@ async function admin(env, request, url) {
 
   if (a === "me" && m === "GET") {
     if (ctx.mfaPending) return json({ role: ctx.role, username: ctx.username, perms: [], mfa_required: true });
-    return json({ role: ctx.role, username: ctx.username, perms: ctx.perms.includes("*") ? ALL_PERMS : ctx.perms, mfa_enforced: mfaOn(env) });
+    return json({ role: ctx.role, username: ctx.username, perms: ctx.perms.includes("*") ? ALL_PERMS : ctx.perms, mfa_enforced: mfaOn(env), telegram: !!(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) });
   }
   if (a === "stats" && m === "GET") return stats(env, ctx);
   if (a === "games" && b && c === "icon" && m === "POST") return gameIcon(env, ctx, b, request);
@@ -1342,10 +1354,10 @@ export default {
       if (p === "/api/bot/payments" && m === "POST") { const r = await botPayment(env, request); if (r.ok) kick(ectx, env); return r; }
       const op = p.match(/^\/api\/orders\/([0-9a-f-]{36})(\/proof)?$/i);
       if (op && !op[2] && m === "GET") return await myOrder(env, request, op[1]);
-      if (op && op[2] && m === "POST") return await submitProof(env, request, op[1]);
+      if (op && op[2] && m === "POST") { const r = await submitProof(env, request, op[1]); if (r.ok) tell(ectx, env, "💸 NEXORA: nuevo comprobante de pago por revisar.\n" + url.origin + "/admin#comprobantes"); return r; }
       const pb = p.match(/^\/api\/orders\/([0-9a-f-]{36})\/pay-balance$/i);
       if (pb && m === "POST") { const r = await payBalance(env, request, pb[1]); if (r.ok) kick(ectx, env); return r; }
-      if (p === "/api/topups" && m === "POST") return await topupCreate(env, request);
+      if (p === "/api/topups" && m === "POST") { const r = await topupCreate(env, request); if (r.ok) tell(ectx, env, "💰 NEXORA: nueva recarga de saldo por aprobar.\n" + url.origin + "/admin#recargas"); return r; }
       if (p === "/api/topups" && m === "GET") return await topupsMine(env, request);
       if (p === "/api/topups/amount" && m === "GET") return await topupAmount(env, request, url);
       if (p === "/api/login" && m === "POST") return await login(env, request);
