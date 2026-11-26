@@ -467,3 +467,35 @@ body.noscroll{overflow:hidden}
 .foot .social a{width:38px;height:38px;border-radius:10px}
 .foot .legalrow{margin:4px 0;font-size:.8rem}
 .foot .copy{padding-top:8px;margin:6px 0 0;font-size:.78rem}
+
+/* Checkout elegante: filas de NexoCoins/cupón, resumen y métodos con radio */
+.trow,.cpn summary{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;margin-top:12px;border-radius:16px;background:var(--card);border:1.5px solid var(--line2);cursor:pointer;transition:border-color .2s,background .2s,box-shadow .2s}
+.trow:active,.cpn summary:active{transform:scale(.99)}
+.trow.on{border-color:var(--acc);background:rgba(22,217,74,.1);box-shadow:0 0 0 3px rgba(22,217,74,.12)}
+.trow[hidden]{display:none}
+.tico{width:40px;height:40px;flex:none;border-radius:12px;display:grid;place-items:center;background:rgba(22,217,74,.08);border:1px solid var(--line2);color:var(--hi)}
+.tico svg{width:26px;height:26px}.tico.cp svg{width:20px;height:20px}
+.tt{flex:1;min-width:0}.tt b{display:block;font-size:.98rem;text-transform:none;letter-spacing:0;color:var(--tx)}.tt small{color:var(--tx2);font-size:.8rem}
+.trow.on .tt b{color:var(--hi)}
+.sw{appearance:none;-webkit-appearance:none;width:46px;height:27px;flex:none;border-radius:99px;background:#26322b;position:relative;cursor:pointer;transition:background .2s;border:0;margin:0}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#cfd8d2;transition:transform .22s cubic-bezier(.3,1.4,.5,1),background .2s}
+.sw:checked{background:var(--acc)}.sw:checked::after{transform:translateX(19px);background:#fff}
+.cpn{border:0;padding:0;margin:0}
+.cpn summary{justify-content:flex-start;font-weight:400;letter-spacing:0;text-transform:none;font-size:1rem}
+.cpn summary::after{margin-left:auto;content:"›";font-size:1.4rem;color:var(--tx2);transition:transform .2s}
+.cpn[open] summary::after{content:"›";transform:rotate(90deg)}
+.cpn input{width:100%;height:50px;margin-top:8px;padding:0 14px;border-radius:12px;border:1px solid var(--line2);background:#060b08;color:inherit;outline:0;text-transform:uppercase}
+.cpn[open] input{animation:cpin .25s ease}
+@keyframes cpin{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.sumry{margin-top:14px}
+.sumry h3{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--tx2);margin:0 0 6px}
+.srow{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line2);color:var(--tx2)}
+.srow b{color:var(--tx);font-weight:600}.srow .dsc{color:var(--hi)}
+.srow.tot{border-bottom:0;padding-bottom:0;font-size:1.05rem}.srow.tot span{color:var(--hi);font-weight:800}.srow.tot b{color:var(--hi);font-size:1.25rem;font-weight:800}
+.sumry .muted{margin:4px 0 0;text-align:right;font-size:.8rem}
+.mrow{border-radius:16px}
+.radio{width:22px;height:22px;flex:none;border-radius:50%;border:2px solid #3a4a41;position:relative;transition:border-color .2s}
+.mrow.on .radio{border-color:var(--acc)}
+.mrow.on .radio::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--acc);animation:pop .25s cubic-bezier(.3,1.5,.5,1)}
+@keyframes pop{from{transform:scale(0)}to{transform:scale(1)}}
+@media(prefers-reduced-motion:reduce){.sw::after,.mrow.on .radio::after,.cpn[open] input{animation:none;transition:none}}

@@ -66,10 +66,15 @@
     var row = $('#coinrow'); if (!row) return;
     row.hidden = !(coins > 0 && sel);
     if (!sel) return;
-    if (coins > 0) $('#coinhint').textContent = '(tienes ' + coins + ' · usarías ' + coinMax() + ' = −' + usd(coinMax() / 100) + ')';
-    var tot = Math.max(Number(sel.price_usd) - ($('#usecoins').checked ? coinMax() / 100 : 0), 0);
+    var on = $('#usecoins').checked, dsc = on ? coinMax() / 100 : 0;
+    var tot = Math.max(Number(sel.price_usd) - dsc, 0);
     $('#total').textContent = usd(tot); $('#totves').textContent = data && data.rate ? '≈ ' + ves(tot, data.rate) : '';
+    row.classList.toggle('on', on);
+    if (coins > 0) $('#coinhint').textContent = on ? 'Usando ' + coinMax() + ' NexoCoins' : 'Tienes ' + coins + ' · ahorras hasta ' + usd(coinMax() / 100);
+    $('#sPrice').textContent = usd(sel.price_usd); $('#sDiscRow').hidden = !on; $('#sDisc').textContent = '−' + usd(dsc);
+    $('#sTot').textContent = usd(tot); $('#sVes').textContent = data && data.rate ? 'Equivale a ' + ves(tot, data.rate) : '';
   }
+  var ci = $('#coico'); if (ci && window.NXArt) ci.append(NXArt.coin('coin'));
   $('#usecoins').addEventListener('change', refreshCoins);
 
   // Verificación de ID (solo si el proveedor está activo y hay sesión). Es informativa: no bloquea la compra.

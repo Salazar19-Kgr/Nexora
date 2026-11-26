@@ -27,8 +27,22 @@
       <button class="btn ghost sm" type="button" id="chkid" hidden>Verificar mi ID</button>
       <p class="msg" id="idres" role="status"></p>
       <p class="muted" id="vnote">Revisa bien tu ID: las recargas no se pueden cambiar de cuenta.</p>
-      <label class="chk" id="coinrow" hidden><input type="checkbox" id="usecoins"><span>Usar mis NexoCoins <small class="muted" id="coinhint"></small></span></label>
-      <label>Cupón de descuento (opcional)<input id="coupon" maxlength="32" autocomplete="off" autocapitalize="characters" placeholder="Ej: NX-ABCD-1234"></label>
+    </div>
+    <label class="trow coinrow" id="coinrow" hidden>
+      <span class="tico" id="coico"></span>
+      <span class="tt"><b>Usar mis NexoCoins</b><small id="coinhint"></small></span>
+      <input type="checkbox" id="usecoins" class="sw" aria-label="Usar mis NexoCoins">
+    </label>
+    <details class="cpn">
+      <summary><span class="tico cp"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-star"/></svg></span><span class="tt"><b>Cupón de descuento</b><small>Opcional</small></span></summary>
+      <input id="coupon" maxlength="32" autocomplete="off" autocapitalize="characters" placeholder="Ej: NX-ABCD-1234" aria-label="Cupón de descuento">
+    </details>
+    <div class="card sumry" id="sumry">
+      <h3>Resumen de pago</h3>
+      <div class="srow"><span>Precio</span><b id="sPrice">—</b></div>
+      <div class="srow" id="sDiscRow" hidden><span>Descuento con NexoCoins</span><b id="sDisc" class="dsc"></b></div>
+      <div class="srow tot"><span>Total</span><b id="sTot">—</b></div>
+      <p class="muted" id="sVes"></p>
     </div>
   </section>
   <p id="msg" class="msg" role="status"></p>

@@ -110,10 +110,10 @@
       var ok = Number(order.amount_usd) >= Number(m.min_usd || 0);
       var b = document.createElement('button'); b.type = 'button'; b.className = 'prow mrow'; b.disabled = !ok; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', 'false');
       if (method && method.id === m.id) { b.classList.add('on'); b.setAttribute('aria-checked', 'true'); }
-      var ic = document.createElement('span'); ic.className = 'mico'; ic.append(NXArt.methodIcon(m.kind));
+      var ic = document.createElement('span'); ic.className = 'radio'; ic.setAttribute('aria-hidden', 'true');
       var i = document.createElement('div'); i.className = 'pi';
       var nm = document.createElement('b'); nm.textContent = m.name;
-      var sm = document.createElement('small'); sm.textContent = ok ? ('Pagas en ' + m.currency) : ('Mínimo ' + usd(m.min_usd));
+      var sm = document.createElement('small'); sm.textContent = ok ? (m.currency === 'USDT' ? 'Equivale a ' + usd(order.amount_usd) : 'Pagas en ' + m.currency) : ('Mínimo ' + usd(m.min_usd));
       i.append(nm, sm);
       var pr = document.createElement('span'); pr.className = 'pp'; pr.textContent = ok ? expected(m) : '';
       b.append(ic, i, pr);
@@ -125,9 +125,19 @@
   function pickMethod(m, keep) {
     method = m;
     Array.prototype.forEach.call(document.querySelectorAll('#mlist .prow'), function (x, i) { var on = methods[i] && methods[i].id === m.id; x.classList.toggle('on', on); x.setAttribute('aria-checked', on ? 'true' : 'false'); });
+    drawSum(m);
     $('#amt').textContent = expected(m); $('#mname').textContent = m.name; $('#instr').textContent = m.instructions;
     show('#s-pay', true); show('#s-proof', true);
     if (!keep) setTimeout(function () { $('#s-pay').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+  }
+  function drawSum(m) {
+    var b = $('#psum'); b.replaceChildren(); b.hidden = false;
+    function row(l, v, c) { var r = document.createElement('div'); r.className = 'srow' + (c ? ' ' + c : ''); var a = document.createElement('span'); a.textContent = l; var x = document.createElement('b'); x.textContent = v; r.append(a, x); return r; }
+    var h = document.createElement('h3'); h.textContent = 'Resumen de pago'; b.append(h);
+    var base = Number(order.amount_usd) + Number(order.discount_usd || 0);
+    b.append(row('Precio', usd(base)));
+    if (Number(order.discount_usd) > 0) { var d = row('Descuento', '−' + usd(order.discount_usd)); d.lastChild.className = 'dsc'; b.append(d); }
+    b.append(row('Total a pagar', expected(m), 'tot'));
   }
   $('#cp-amt').addEventListener('click', function (e) { copy($('#amt').textContent.replace(/^[^0-9]+/, '').replace(/\s*USDT$/, ''), e.target); });
   $('#cp-ins').addEventListener('click', function (e) { copy($('#instr').textContent, e.target); });
