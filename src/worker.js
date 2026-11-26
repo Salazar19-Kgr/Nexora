@@ -165,11 +165,11 @@ async function gamePage(env, request, url, slug) {
   if (!country) return json({ game: g[0], products: [], rate: null, country: null, locked, currency: null });
   const currency = LOCAL_CUR[country];
   const [rows, rate] = await Promise.all([
-    sb(env, `products?game_id=eq.${g[0].id}&status=eq.active&select=id,name,product_prices(country,price_usd)`),
+    sb(env, `products?game_id=eq.${g[0].id}&status=eq.active&select=id,name,price_usd,product_prices(country,price_usd)`, { service: true }),
     latestRate(env, currency),
   ]);
   const products = rows
-    .map((p) => ({ id: p.id, name: p.name, price_usd: (p.product_prices.find((x) => x.country === country) || {}).price_usd }))
+    .map((p) => ({ id: p.id, name: p.name, price_usd: ((p.product_prices || []).find((x) => x.country === country) || {}).price_usd }))
     .filter((p) => p.price_usd != null)
     .sort((a, b) => Number(a.price_usd) - Number(b.price_usd));
   return json({ game: g[0], products, rate, country, locked, currency });
@@ -512,7 +512,7 @@ const RES = {
       delivery_type: { t: "enum", label: "Entrega", list: ["manual", "code", "api"], def: "manual" },
       provider_offer_id: { t: "num", label: "ID de oferta GamesDrop", int: true, min: 1, max: 999999999 },
       old_price_usd: { t: "num", label: "Precio anterior (USD)", min: 0.01, max: 100000 },
-      status: { t: "enum", label: "Estado", list: ST, def: "draft" },
+      status: { t: "enum", label: "Estado", list: ST, def: "active" },
     },
     async beforeCreate(env, out) {
       if (out.sku) return;

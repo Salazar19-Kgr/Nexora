@@ -24,16 +24,24 @@
   <section class="panel">
     <div class="ph"><div><h1>Mi perfil</h1><p>Tu espacio en NEXORA</p></div><span class="badge">Bienvenido de vuelta</span></div>
     <div class="stats five">
-      <div class="stat"><b id="bal">$0.00</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wallet"/></svg>Saldo</span></div>
+      <button type="button" class="stat stat-btn" id="openbal" aria-haspopup="dialog"><b id="bal">$0.00</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wallet"/></svg>Saldo <em>Recargar</em></span></button>
       <div class="stat"><b id="coins">0</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-coin"/></svg>NexoCoins</span></div>
       <div class="stat"><b id="ocount">0</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-list"/></svg>Pedidos</span></div>
       <div class="stat"><b id="pts">0</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-star"/></svg>Puntos</span></div>
       <div class="stat"><b id="spn">0</b><span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bolt"/></svg>Giros</span></div>
     </div>
 
-    <h2 id="saldo">Recargar saldo</h2>
-    <div class="card" id="topup">
-      <p class="muted">Recarga saldo (5, 10, 20 o 50 dólares). Lo aprobamos a mano y luego pagas tus pedidos con un toque.</p>
+    <div class="sheet" id="sheet" hidden>
+     <div class="sbg" data-close></div>
+     <div class="spane" role="dialog" aria-modal="true" aria-labelledby="stitle">
+      <div class="sgrip" aria-hidden="true"></div>
+      <div class="swallet">
+        <div><small>Tu saldo</small><strong id="sbal">$0.00</strong></div>
+        <button type="button" class="sx" data-close aria-label="Cerrar">✕</button>
+      </div>
+      <h2 id="stitle">Recargar saldo</h2>
+    <div id="topup">
+      <p class="muted">Elige 5, 10, 20 o 50 dólares. Lo aprobamos a mano y luego pagas tus pedidos con un toque.</p>
       <div class="fchips" id="tamts" role="group" aria-label="Monto"></div>
       <div class="plist" id="tmeth" role="group" aria-label="Método de pago"></div>
       <form id="tform" novalidate>
@@ -46,6 +54,8 @@
       </form>
       <p id="tmsg" class="msg" role="status"></p>
       <div id="tlist"></div>
+    </div>
+     </div>
     </div>
     <h2 id="recompensas">Recompensas</h2>
     <div class="rw">

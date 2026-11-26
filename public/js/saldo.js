@@ -6,6 +6,21 @@
   function usd(n) { return '$' + Number(n || 0).toFixed(2); }
   function el(t, c, x) { var e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; }
   var api = function (p, o) { return NXApi(p, o, token); };
+  var sheet = $('#sheet'), opener = $('#openbal'), lastFocus = null;
+  function openSheet() {
+    lastFocus = document.activeElement; sbal(); sheet.hidden = false;
+    requestAnimationFrame(function () { sheet.classList.add('open'); });
+    document.body.classList.add('noscroll'); var f = sheet.querySelector('.chip'); if (f) f.focus({ preventScroll: true });
+  }
+  function closeSheet() {
+    sheet.classList.remove('open'); document.body.classList.remove('noscroll');
+    setTimeout(function () { sheet.hidden = true; }, 260); if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  function sbal() { var b = $('#bal'), t = $('#sbal'); if (b && t) t.textContent = b.textContent; }
+  if (opener) opener.addEventListener('click', openSheet);
+  sheet.addEventListener('click', function (e) { if (e.target.closest('[data-close]')) closeSheet(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); });
+  if (location.hash === '#saldo') setTimeout(openSheet, 400);
   var msg = $('#tmsg');
   function say(t, ok) { msg.textContent = t || ''; msg.className = 'msg' + (ok ? ' ok' : ''); }
 
