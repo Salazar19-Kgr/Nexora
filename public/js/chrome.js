@@ -207,3 +207,24 @@
     document.addEventListener('click', function (e) { if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) menu.hidden = true; });
   });
 })();
+
+/* Onda verde al tocar cualquier opción (reemplaza el cuadro azul del navegador) */
+(function () {
+  if (window.__nxRip) return; window.__nxRip = 1;
+  var SEL = 'a,button,[role=button],label.chip,summary,.chip';
+  document.addEventListener('pointerdown', function (e) {
+    try {
+      var t = e.target && e.target.closest ? e.target.closest(SEL) : null;
+      if (!t || t.disabled || t.closest('.noripple,input,select,textarea,video')) return;
+      var r = t.getBoundingClientRect(); if (r.width < 8 || r.height < 8 || r.width > 700 && r.height > 500) return;
+      var cs = getComputedStyle(t), hadPos = cs.position !== 'static';
+      if (!hadPos) t.style.position = 'relative';
+      t.classList.add('nx-rip-host');
+      var d = document.createElement('span'); d.className = 'nx-rip'; d.setAttribute('aria-hidden', 'true');
+      d.style.left = (e.clientX - r.left) + 'px'; d.style.top = (e.clientY - r.top) + 'px';
+      d.style.setProperty('--s', String(Math.max(6, Math.ceil(Math.hypot(r.width, r.height) / 10))));
+      t.appendChild(d);
+      setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); if (!t.querySelector('.nx-rip')) { t.classList.remove('nx-rip-host'); if (!hadPos) t.style.position = ''; } }, 650);
+    } catch (x) {}
+  }, { passive: true });
+})();

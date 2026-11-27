@@ -505,3 +505,12 @@ body.noscroll{overflow:hidden}
 .idwarn .ic{width:24px;height:24px;flex:none;color:#ffc43c;margin-top:2px}
 .idwarn b{display:block;color:#ffd777;font-size:.95rem}
 .idwarn p{margin:4px 0 0;color:var(--tx2);font-size:.84rem;line-height:1.4}
+
+/* Sin el cuadro azul de Android al tocar; en su lugar, onda verde (ver chrome.js) */
+*{-webkit-tap-highlight-color:transparent}
+a,button,[role=button],label,summary{-webkit-tap-highlight-color:transparent;outline:none}
+a:focus-visible,button:focus-visible{outline:2px solid rgba(92,255,122,.8);outline-offset:2px}
+.nx-rip-host{position:relative;overflow:hidden}
+.nx-rip{position:absolute;border-radius:50%;pointer-events:none;z-index:0;width:20px;height:20px;margin:-10px 0 0 -10px;background:radial-gradient(circle,rgba(92,255,122,.55),rgba(22,217,74,.25) 45%,rgba(22,217,74,0) 70%);transform:scale(0);opacity:1;animation:nxrip .6s ease-out forwards}
+@keyframes nxrip{to{transform:scale(var(--s,14));opacity:0}}
+@media(prefers-reduced-motion:reduce){.nx-rip{animation-duration:.01s}}
