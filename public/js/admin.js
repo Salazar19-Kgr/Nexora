@@ -1048,6 +1048,91 @@
   }
 
   // ---------- Navegación ----------
+  // ---------- Apariencia de Nexora: temas, programación y textos de banners ----------
+  var TZS = [['America/Caracas', 'Venezuela (Caracas)'], ['America/Santo_Domingo', 'Rep. Dominicana'], ['America/Panama', 'Panamá'], ['America/Mexico_City', 'México (CDMX)'], ['America/New_York', 'Estados Unidos (Este)'], ['UTC', 'UTC']];
+  var THEME_NAMES = { general: 'Nexora General', navidad: 'Nexora Navideña' };
+  function viewAppearance() {
+    view.replaceChildren(skeleton());
+    return api('appearance').then(function (a) {
+      var canW = has('catalog.write'), st = JSON.parse(JSON.stringify(a)), tab = 'general';
+      var root = h('div', { class: 'appear' });
+
+      // 1) Tema activo
+      var tcard = h('div', { class: 'card' }, h('h2', { text: 'Temas de la tienda' }));
+      var act = a.active || { theme: a.theme, scheduled: false };
+      tcard.append(h('p', { class: 'muted', text: 'Ahora los clientes ven: ' + THEME_NAMES[act.theme] + (act.scheduled ? ' (por la programación automática)' : '') + '.' }));
+      var grid = h('div', { class: 'themegrid' });
+      ['general', 'navidad'].forEach(function (k) {
+        var isAct = act.theme === k;
+        var thumb = h('div', { class: 'thumb t-' + k }, h('i', { class: 'tl' }), h('i', { class: 'tb' }));
+        var btns = h('div', { class: 'tbtns' },
+          h('button', { class: 'btn ghost sm', type: 'button', text: 'Vista previa', onclick: function () { window.open('/?tema=' + k, '_blank', 'noopener'); } }),
+          canW ? h('button', { class: 'btn sm', type: 'button', text: a.theme === k ? 'Tema elegido' : 'Activar tema', disabled: a.theme === k, onclick: function (ev) {
+            ev.target.disabled = true;
+            api('appearance', { body: { theme: k } }).then(function () { toast('Tema activado'); return viewAppearance(); }).catch(function (e) { toast(e.message, true); ev.target.disabled = false; });
+          } }) : null);
+        grid.append(h('div', { class: 'themeopt' + (isAct ? ' on' : '') }, thumb, h('b', { text: THEME_NAMES[k] }), isAct ? h('span', { class: 'tagon', text: 'Activo ahora' }) : null, btns));
+      });
+      tcard.append(grid);
+      if (act.scheduled && a.theme !== act.theme) tcard.append(h('p', { class: 'note', text: 'La programación está activa: cuando termine, la tienda volverá a "' + THEME_NAMES[a.theme] + '".' }));
+      root.append(tcard);
+
+      // 2) Programación
+      var sc = st.schedule;
+      var scard = h('div', { class: 'card' }, h('h2', { text: 'Programación automática' }), h('p', { class: 'muted', text: 'Activa un tema solo entre dos fechas y la tienda vuelve sola al tema elegido arriba cuando termina.' }));
+      var en = h('input', { type: 'checkbox', class: 'sw' }); en.checked = !!sc.enabled;
+      var th = h('select', null, ['navidad', 'general'].map(function (k) { return h('option', { value: k, text: THEME_NAMES[k] }); })); th.value = sc.theme || 'navidad';
+      var d1 = h('input', { type: 'datetime-local', value: sc.start || '' }), d2 = h('input', { type: 'datetime-local', value: sc.end || '' });
+      var tz = h('select', null, TZS.map(function (z) { return h('option', { value: z[0], text: z[1] }); })); tz.value = sc.tz || 'America/Caracas';
+      var msg = h('p', { class: 'msg' });
+      var nowTxt = h('p', { class: 'muted', text: a.now_local ? 'Hora actual en esa zona: ' + a.now_local.replace('T', ' ') : '' });
+      scard.append(
+        h('label', { class: 'trow' + (en.checked ? ' on' : ''), style: 'margin-top:8px' }, h('span', { class: 'tt' }, h('b', { text: 'Activar y desactivar automáticamente' })), en),
+        h('label', { text: 'Tema que se programa' }, th),
+        h('label', { text: 'Desde' }, d1), h('label', { text: 'Hasta' }, d2),
+        h('label', { text: 'Zona horaria' }, tz), nowTxt,
+        h('button', { class: 'btn ghost sm', type: 'button', text: 'Usar diciembre (1 dic – 7 ene)', onclick: function () {
+          var n = new Date(), y = n.getMonth() === 0 && n.getDate() > 7 ? n.getFullYear() : (n.getMonth() === 0 ? n.getFullYear() - 1 : n.getFullYear());
+          if (n.getMonth() === 0 && n.getDate() <= 7) y = n.getFullYear() - 1; else y = n.getFullYear();
+          th.value = 'navidad'; d1.value = y + '-12-01T00:00'; d2.value = (y + 1) + '-01-07T00:00'; en.checked = true; en.dispatchEvent(new Event('change'));
+        } }), msg);
+      en.addEventListener('change', function () { en.parentNode.classList.toggle('on', en.checked); });
+      if (canW) scard.append(h('button', { class: 'btn', type: 'button', text: 'Guardar programación', style: 'margin-top:10px', onclick: function (ev) {
+        ev.target.disabled = true; msg.textContent = '';
+        api('appearance', { body: { schedule: { enabled: en.checked, theme: th.value, start: d1.value, end: d2.value, tz: tz.value } } })
+          .then(function () { toast('Programación guardada'); return viewAppearance(); }).catch(function (e) { msg.textContent = e.message; ev.target.disabled = false; });
+      } }));
+      root.append(scard);
+
+      // 3) Textos de los banners
+      var ccard = h('div', { class: 'card' }, h('h2', { text: 'Textos de los banners' }), h('p', { class: 'muted', text: 'Edita lo que dicen el banner principal (hasta 4 diapositivas) y el banner promocional. Los enlaces pueden ser internos (como /juegos) o empezar con https://. No pongas descuentos que no existan.' }));
+      var tabs = h('div', { class: 'fchips' }), body = h('div'), cmsg = h('p', { class: 'msg' });
+      function field(label, o, k, max, ph) { var i = h('input', { value: o[k] || '', maxlength: max, placeholder: ph || '' }); i.disabled = !canW; i.addEventListener('input', function () { o[k] = i.value; }); return h('label', { text: label }, i); }
+      function paint() {
+        tabs.replaceChildren(); ['general', 'navidad'].forEach(function (k) { tabs.append(h('button', { class: 'chip' + (tab === k ? ' on' : ''), type: 'button', text: THEME_NAMES[k], onclick: function () { tab = k; paint(); } })); });
+        var c = st.content[tab]; body.replaceChildren();
+        c.hero.forEach(function (sl, i) {
+          var box = h('div', { class: 'slideed' }, h('h3', { text: 'Banner principal ' + (i + 1) }),
+            field('Línea 1', sl, 't1', 30), field('Línea 2 (en verde)', sl, 't2', 30), field('Subtítulo', sl, 'sub', 80), field('Texto del botón', sl, 'cta', 24), field('Enlace del botón', sl, 'link', 200, '/juegos'));
+          if (canW && c.hero.length > 1) box.append(h('button', { class: 'btn ghost sm', type: 'button', text: 'Quitar este banner', onclick: function () { c.hero.splice(i, 1); paint(); } }));
+          body.append(box);
+        });
+        if (canW && c.hero.length < 4) body.append(h('button', { class: 'btn ghost sm', type: 'button', text: '+ Agregar banner', onclick: function () { c.hero.push({ t1: 'Nuevo', t2: 'banner', sub: '', cta: 'Ver más', link: '/juegos' }); paint(); } }));
+        var pr = c.promo;
+        body.append(h('div', { class: 'slideed' }, h('h3', { text: 'Banner promocional' }),
+          field('Línea 1', pr, 't1', 30), field('Línea 2 (en verde)', pr, 't2', 30), field('Subtítulo', pr, 'sub', 80), field('Texto del botón', pr, 'cta', 24), field('Enlace del botón', pr, 'link', 200, '/cuenta#recompensas'), field('Etiqueta redonda (opcional, ej. +10%)', pr, 'badge', 14)));
+      }
+      paint();
+      ccard.append(tabs, body, cmsg);
+      if (canW) ccard.append(h('button', { class: 'btn', type: 'button', text: 'Guardar textos', style: 'margin-top:10px', onclick: function (ev) {
+        ev.target.disabled = true; cmsg.textContent = '';
+        api('appearance', { body: { content: st.content } }).then(function () { toast('Textos guardados'); ev.target.disabled = false; }).catch(function (e) { cmsg.textContent = e.message; ev.target.disabled = false; });
+      } }));
+      root.append(ccard);
+      show('Apariencia de Nexora', 'Cambia el diseño de toda la tienda sin tocar código', null, root);
+    }).catch(function (e) { view.replaceChildren(h('p', { class: 'msg', text: e.message || 'No se pudo cargar. ¿Ya ejecutaste el SQL 0018?' })); });
+  }
+
   var SECTIONS = [
     { id: 'resumen', label: 'Resumen', icon: 'panel', perm: 'stats', go: viewStats },
     { id: 'pedidos', label: 'Pedidos', icon: 'list', perm: 'orders.read', go: viewOrders },
@@ -1061,6 +1146,7 @@
     { id: 'pagos', label: 'Métodos de pago', icon: 'wallet', perm: 'payments.write', go: function () { CFG.paymethods.canWrite = true; return manager(CFG.paymethods); } },
     { id: 'cupones', label: 'Cupones', icon: 'crown', perm: 'coupons.write', go: function () { CFG.coupons.canWrite = true; return manager(CFG.coupons); } },
     { id: 'canjes', label: 'Canjes', icon: 'star', perm: 'codes.write', go: function () { CFG.codes.canWrite = true; return manager(CFG.codes); } },
+    { id: 'apariencia', label: 'Apariencia', icon: 'star', perm: 'catalog.read', go: viewAppearance },
     { id: 'ruleta', label: 'Ruleta', icon: 'bolt', perm: 'wheel.write', go: function () { CFG.prizes.canWrite = true; return manager(CFG.prizes); } },
     { id: 'auditoria', label: 'Auditoría', icon: 'shield', perm: 'audit.read', go: viewAudit }
   ];

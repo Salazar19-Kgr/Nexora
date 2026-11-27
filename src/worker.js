@@ -124,15 +124,18 @@ async function readBody(request) {
 const SOLD_BANDS = [10000, 5000, 1000, 500, 100, 50, 10];
 const soldBand = (n) => SOLD_BANDS.find((b) => n >= b) || 0;
 async function listGames(env) {
-  const [games, stats] = await Promise.all([
+  const [games, stats, prices] = await Promise.all([
     sb(env, "games?status=eq.active&select=id,slug,name,category,description,icon_url,required_fields,created_at&order=sort_order.asc"),
     rpc(env, "game_stats", {}).catch(() => []),
+    sb(env, "products?status=eq.active&select=game_id,price_usd&limit=3000").catch(() => []),
   ]);
   const by = new Map((stats || []).map((r) => [r.game_id, r]));
+  const low = new Map();
+  for (const r of prices || []) { const v = Number(r.price_usd); if (v > 0 && (!low.has(r.game_id) || v < low.get(r.game_id))) low.set(r.game_id, v); }
   const fresh = Date.now() - 14 * 86400000;
   return games.map(({ created_at, ...g }, i) => {
     const st = by.get(g.id) || {};
-    return { ...g, rank: i, sold: soldBand(Number(st.sold) || 0), discount_pct: Math.min(Number(st.discount_pct) || 0, 90), is_new: new Date(created_at).getTime() > fresh };
+    return { ...g, rank: i, from_usd: low.get(g.id) || null, sold: soldBand(Number(st.sold) || 0), discount_pct: Math.min(Number(st.discount_pct) || 0, 90), is_new: new Date(created_at).getTime() > fresh };
   });
 }
 
@@ -173,6 +176,118 @@ async function gamePage(env, request, url, slug) {
     .filter((p) => p.price_usd != null)
     .sort((a, b) => Number(a.price_usd) - Number(b.price_usd));
   return json({ game: g[0], products, rate, country, locked, currency });
+}
+
+
+// ---------- Apariencia de la tienda: tema activo, programación y textos de banners ----------
+const THEMES = ["general", "navidad"];
+const DEFAULT_APPEARANCE = {
+  theme: "general",
+  schedule: { enabled: false, theme: "navidad", start: "", end: "", tz: "America/Caracas" },
+  content: {
+    general: {
+      hero: [
+        { t1: "Recarga", t2: "sin límites", sub: "Juega más, disfruta más", cta: "Explorar juegos", link: "/juegos" },
+        { t1: "Gira y", t2: "gana premios", sub: "La ruleta de NEXORA te espera", cta: "Ir a la ruleta", link: "/cuenta#recompensas" },
+        { t1: "Tu saldo,", t2: "tu ritmo", sub: "Recarga saldo y paga con un toque", cta: "Ver mi saldo", link: "/cuenta#saldo" },
+      ],
+      promo: { t1: "Premios en", t2: "la ruleta", sub: "Gira y gana saldo, puntos y NexoCoins", cta: "Ir a la ruleta", link: "/cuenta#recompensas", badge: "" },
+    },
+    navidad: {
+      hero: [
+        { t1: "Esta Navidad", t2: "juega sin límites", sub: "Recarga y disfruta tus juegos favoritos", cta: "Explorar ofertas", link: "/ofertas" },
+        { t1: "Gira y gana", t2: "esta Navidad", sub: "La ruleta de NEXORA te espera", cta: "Ir a la ruleta", link: "/cuenta#recompensas" },
+      ],
+      promo: { t1: "Ruleta", t2: "navideña", sub: "Gira y gana premios en esta temporada", cta: "Girar ahora", link: "/cuenta#recompensas", badge: "" },
+    },
+  },
+};
+const clone = (o) => JSON.parse(JSON.stringify(o));
+function cleanText(v, max, label) {
+  const t = String(v == null ? "" : v).replace(/[\u0000-\u001f<>]/g, "").trim();
+  if (t.length > max) throw bad(`${label}: máximo ${max} letras.`);
+  return t;
+}
+function cleanLink(v, label) {
+  const t = String(v == null ? "" : v).trim();
+  if (!t) return "/juegos";
+  if (t.length > 200 || !(/^\/(?!\/)[A-Za-z0-9\-._~\/?#=&%]*$/.test(t) || /^https:\/\/[^\s<>"']+$/.test(t))) throw bad(`${label}: usa una dirección interna (como /juegos) o una que empiece con https://`);
+  return t;
+}
+function cleanSlide(x, i) {
+  return { t1: cleanText(x && x.t1, 30, `Banner ${i + 1} línea 1`), t2: cleanText(x && x.t2, 30, `Banner ${i + 1} línea 2`), sub: cleanText(x && x.sub, 80, `Banner ${i + 1} subtítulo`), cta: cleanText(x && x.cta, 24, `Banner ${i + 1} botón`) || "Ver más", link: cleanLink(x && x.link, `Banner ${i + 1} enlace`) };
+}
+function cleanContent(c) {
+  const out = {};
+  for (const th of THEMES) {
+    const src = (c && c[th]) || {};
+    const hero = Array.isArray(src.hero) ? src.hero.slice(0, 4) : [];
+    if (!hero.length) throw bad("Cada tema necesita al menos un banner principal.");
+    const pr = src.promo || {};
+    out[th] = {
+      hero: hero.map(cleanSlide),
+      promo: { ...cleanSlide(pr, 0), badge: cleanText(pr.badge, 14, "Etiqueta del banner promocional") },
+    };
+  }
+  return out;
+}
+function validTz(tz) { try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return true; } catch (e) { return false; } }
+function localNow(tz, at = new Date()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(at).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+function resolveTheme(a, at = new Date()) {
+  const sc = a.schedule || {};
+  if (sc.enabled && sc.start && sc.end && validTz(sc.tz)) {
+    const now = localNow(sc.tz, at);
+    if (now >= sc.start && now < sc.end && THEMES.includes(sc.theme)) return { theme: sc.theme, scheduled: true };
+  }
+  return { theme: THEMES.includes(a.theme) ? a.theme : "general", scheduled: false };
+}
+async function loadAppearance(env) {
+  const base = clone(DEFAULT_APPEARANCE);
+  try {
+    const r = await sb(env, "site_settings?key=eq.appearance&select=value", { service: true });
+    const v = r[0] && r[0].value;
+    if (v) {
+      if (THEMES.includes(v.theme)) base.theme = v.theme;
+      if (v.schedule) base.schedule = { ...base.schedule, ...v.schedule };
+      if (v.content) for (const th of THEMES) if (v.content[th]) base.content[th] = { ...base.content[th], ...v.content[th] };
+    }
+  } catch (e) { /* sin la migración 0018 se usan los valores de fábrica */ }
+  return base;
+}
+async function publicTheme(env) {
+  const a = await loadAppearance(env);
+  const r = resolveTheme(a);
+  return new Response(JSON.stringify({ theme: r.theme, content: a.content[r.theme] }), { status: 200, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=20" } });
+}
+async function appearanceGet(env, ctx) {
+  need(ctx, "catalog.read");
+  const a = await loadAppearance(env);
+  return json({ ...a, active: resolveTheme(a), now_local: validTz(a.schedule.tz) ? localNow(a.schedule.tz) : null });
+}
+async function appearanceSave(env, ctx, body) {
+  need(ctx, "catalog.write");
+  const cur = await loadAppearance(env);
+  const next = clone(cur);
+  if (body.theme !== undefined) { if (!THEMES.includes(body.theme)) throw bad("Tema no válido."); next.theme = body.theme; }
+  if (body.schedule !== undefined) {
+    const sc = body.schedule || {};
+    const re = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+    const tz = String(sc.tz || "America/Caracas");
+    if (!validTz(tz)) throw bad("Zona horaria no válida.");
+    const enabled = !!sc.enabled;
+    const start = String(sc.start || ""), end = String(sc.end || "");
+    if (enabled && (!re.test(start) || !re.test(end))) throw bad("Pon la fecha de inicio y la de fin.");
+    if (enabled && end <= start) throw bad("La fecha de fin debe ser posterior al inicio.");
+    if (!THEMES.includes(sc.theme || "navidad")) throw bad("Tema programado no válido.");
+    next.schedule = { enabled, theme: sc.theme || "navidad", start: re.test(start) ? start : "", end: re.test(end) ? end : "", tz };
+  }
+  if (body.content !== undefined) next.content = cleanContent(body.content);
+  await sb(env, "site_settings?on_conflict=key", { method: "POST", service: true, headers: { prefer: "resolution=merge-duplicates,return=minimal" }, body: { key: "appearance", value: next, updated_at: new Date().toISOString(), updated_by: ctx.user.id } });
+  await audit(env, ctx.user.id, "appearance.update", "site_settings", null, null, { theme: next.theme, scheduled: next.schedule.enabled });
+  return json({ ...next, active: resolveTheme(next), now_local: localNow(next.schedule.tz) });
 }
 
 async function createOrder(env, request) {
@@ -1052,6 +1167,8 @@ async function admin(env, request, url) {
     return json({ role: ctx.role, username: ctx.username, perms: ctx.perms.includes("*") ? ALL_PERMS : ctx.perms, mfa_enforced: mfaOn(env), telegram: !!(env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) });
   }
   if (a === "stats" && m === "GET") return stats(env, ctx);
+  if (a === "appearance" && !b && m === "GET") return appearanceGet(env, ctx);
+  if (a === "appearance" && !b && m === "POST") return appearanceSave(env, ctx, await readBody(request));
   if (a === "push" && b === "key" && m === "GET") { need(ctx, "stats"); return pushKey(env); }
   if (a === "push" && b === "subscribe" && m === "POST") { need(ctx, "stats"); return pushSubscribe(env, ctx, await readBody(request)); }
   if (a === "push" && b === "test" && m === "POST") { need(ctx, "stats"); limit(`pushtest:${ctx.user.id}`, 5, 60000); return pushTest(env, ctx); }
@@ -1401,6 +1518,7 @@ export default {
       if (g && m === "GET") return json(await listProducts(env, g[1]));
       const gp = p.match(/^\/api\/games\/([a-z0-9-]+)$/);
       if (gp && m === "GET") return await gamePage(env, request, url, gp[1]);
+      if (p === "/api/theme" && m === "GET") return await publicTheme(env);
       if (p === "/api/orders" && m === "POST") return await createOrder(env, request);
       if (p === "/api/payment-methods" && m === "GET") return await paymentMethods(env, request);
       if (p === "/api/verify-player/status" && m === "GET") return json({ available: gdLive(env) });

@@ -8,36 +8,45 @@
 <meta name="description" content="Recarga tus juegos favoritos al instante en NEXORA.">
 <link rel="icon" href="/img/nexora-emblem.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/css/nexora.css">
+<link rel="stylesheet" href="/css/theme.css">
 </head>
-<body>
-<main class="wrap">
-  <div class="hero-card"><img src="/img/nexora-banner.svg" alt="NEXORA. Beyond Gaming. Beyond Limits." width="800" height="470"></div>
-  <p class="tagline">Recarga a la velocidad del juego</p>
-  <div class="dots" id="dots" aria-label="Juegos destacados"></div>
+<body class="home">
+<main class="wrap hm">
 
-  <label class="search"><span class="sr">Buscar juegos</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-search"/></svg><input id="q" type="search" placeholder="Buscar juegos..." autocomplete="off"></label>
-
-  <section class="promo" aria-labelledby="pt">
-    <h2 id="pt">Sube de nivel en segundos</h2>
-    <p>Elige tu juego, paga y recibe tu recarga</p>
-    <a class="btn" href="/juegos">Ver todos los juegos <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></a>
-    <img class="art" src="/img/girl-art.webp" alt="">
+  <section class="hero nx-frame" id="hero" aria-roledescription="carrusel" aria-label="Promociones de NEXORA">
+    <div class="hfx" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <img class="hart" id="hart" src="/img/girl-art.webp" alt="" width="811" height="1000" fetchpriority="high" decoding="async">
+    <img class="hcat" id="hcat" src="/img/gato.webp" alt="" width="167" height="140" decoding="async">
+    <div class="hslides" id="hslides" aria-live="polite"></div>
+    <div class="hdots" id="hdots" role="tablist" aria-label="Elegir banner"></div>
   </section>
 
-  <section id="juegos" aria-live="polite">
-    <div class="sec-h"><h2>Los más recargados</h2><a class="more" href="/juegos">Ver todos <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
-    <div class="tiles" id="tiles">
-      <div class="tile skel"><div class="art"></div></div><div class="tile skel"><div class="art"></div></div><div class="tile skel"><div class="art"></div></div>
+  <section class="perks nx-frame" aria-label="Beneficios">
+    <div class="perk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bolt"/></svg><span>Entrega<br>ultra rápida</span></div>
+    <div class="perk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg><span>Pago<br>seguro</span></div>
+    <div class="perk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-headset"/></svg><span>Soporte<br>24/7</span></div>
+    <div class="perk"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gift"/></svg><span>Promociones<br>exclusivas</span></div>
+  </section>
+
+  <section aria-labelledby="ct">
+    <div class="sec-h2"><h2 id="ct"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gamepad"/></svg>Categorías</h2><a class="more2" href="/juegos">Ver todas <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
+    <div class="cats" id="cats" aria-live="polite"><div class="cat sk"></div><div class="cat sk"></div><div class="cat sk"></div></div>
+  </section>
+
+  <section class="promo2 nx-frame" id="promo2" aria-label="Promoción">
+    <img class="pgifts" id="pgifts" src="/img/regalos.webp" alt="" width="207" height="235" loading="lazy" decoding="async">
+    <div class="ptxt">
+      <h2><span class="l1" id="p1"></span><span class="l2" id="p2"></span></h2>
+      <p id="psub"></p>
+      <a class="cta" id="pcta" href="/cuenta#recompensas"><span></span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></a>
     </div>
+    <img class="part" id="part" src="/img/promo-general.webp" alt="" width="315" height="246" loading="lazy" decoding="async">
+    <span class="pbadge" id="pbadge" hidden></span>
   </section>
 
-  <section class="feats" aria-label="Beneficios">
-    <div class="feat"><i><svg class="ic" viewBox="0 0 24 24"><use href="#i-bolt"/></svg></i>Entrega Turbo</div>
-    <div class="feat"><i><svg class="ic" viewBox="0 0 24 24"><use href="#i-shield"/></svg></i>Pago Blindado</div>
-    <div class="feat"><i><svg class="ic" viewBox="0 0 24 24"><use href="#i-headset"/></svg></i>Soporte a un toque</div>
-    <div class="feat"><i><svg class="ic" viewBox="0 0 24 24"><use href="#i-crown"/></svg></i>Cupones y Drops</div>
-    <div class="feat"><i><svg class="ic" viewBox="0 0 24 24"><use href="#i-panel"/></svg></i>Tu Base de Mando</div>
-    <div class="feat"><i><svg class="ic" viewBox="0 0 24 24"><use href="#i-star"/></svg></i>NexoCoins y Ruleta</div>
+  <section aria-labelledby="mv">
+    <div class="sec-h2"><h2 id="mv"><svg class="ic fl" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-flame"/></svg>Más vendidos</h2><a class="more2" href="/juegos">Ver todos <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
+    <div class="best" id="best" aria-live="polite"><div class="bcard sk"></div><div class="bcard sk"></div></div>
   </section>
 </main>
 

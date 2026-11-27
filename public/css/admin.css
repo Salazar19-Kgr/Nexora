@@ -221,3 +221,19 @@ body.isadmin select{width:100%;height:50px;padding:0 14px;border-radius:12px;bor
   body.isadmin .toast{bottom:104px}
 }
 body.isadmin .aview{border:0;background:none;box-shadow:none;padding:0;backdrop-filter:none}
+
+/* Apariencia */
+.appear .card{margin-top:12px}
+.themegrid{display:grid;gap:12px;grid-template-columns:1fr;margin-top:10px}
+@media(min-width:620px){.themegrid{grid-template-columns:1fr 1fr}}
+.themeopt{position:relative;display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:18px;border:1.5px solid var(--line2);background:var(--card)}
+.themeopt.on{border-color:var(--acc);box-shadow:0 0 0 3px rgba(22,217,74,.14),0 0 24px rgba(22,217,74,.2)}
+.thumb{position:relative;height:120px;border-radius:14px;overflow:hidden;border:1px solid var(--line2);background:#050907 center/cover no-repeat}
+.thumb.t-general{background-image:linear-gradient(90deg,#050907 30%,transparent),url(/img/girl-banner.webp)}
+.thumb.t-navidad{background-image:linear-gradient(90deg,#050907 30%,transparent),url(/img/hero-navidad.webp)}
+.thumb .tl{position:absolute;left:12px;top:22px;width:46%;height:12px;border-radius:6px;background:#fff;opacity:.9}
+.thumb .tb{position:absolute;left:12px;top:46px;width:34%;height:12px;border-radius:6px;background:var(--acc);box-shadow:0 0 12px var(--acc)}
+.tagon{position:absolute;right:18px;top:18px;padding:3px 10px;border-radius:999px;background:var(--acc);color:#03140a;font-size:.72rem;font-weight:800}
+.tbtns{display:flex;gap:8px;flex-wrap:wrap}
+.slideed{margin-top:12px;padding:12px;border-radius:14px;border:1px solid var(--line2);background:rgba(255,255,255,.02);display:grid;gap:8px}
+.slideed h3{font-size:.95rem;color:var(--hi)}

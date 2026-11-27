@@ -1,5 +1,20 @@
 (function () {
+  // ---- Tema de la tienda: se aplica al instante con la copia guardada y luego se confirma con el servidor.
+  var root = document.documentElement, THEMES = ['general', 'navidad'];
+  var qp = new URLSearchParams(location.search).get('tema');
+  var preview = THEMES.indexOf(qp) > -1 ? qp : null;
+  var cached = 'general'; try { cached = localStorage.getItem('nx_theme') || 'general'; } catch (e) {}
+  if (THEMES.indexOf(cached) < 0) cached = 'general';
+  root.dataset.theme = preview || cached;
+  if (!/^\/(admin|ceo)\/?$/.test(location.pathname)) {
+    var cl = document.createElement('link'); cl.rel = 'stylesheet'; cl.href = '/css/theme.css'; document.head.appendChild(cl);
+  }
   var P = {
+    gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+    tag: '<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.3"/>',
+    flame: '<path d="M12 22c4 0 7-2.8 7-7 0-3-1.8-5-3.4-7-.4 1.6-1.2 2.6-2.2 3 .4-3.2-1-6.2-3.4-9-.4 3.4-2 5.4-3.6 7.4C5 11 5 13 5 15c0 4.2 3 7 7 7z"/>',
+    grid: '<rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/>',
+    bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10.3 20a2 2 0 0 0 3.4 0"/>',
     home: '<path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
     gamepad: '<path d="M7 7h10a5 5 0 0 1 5 5v2a3 3 0 0 1-5.2 2L15 14H9l-1.8 2A3 3 0 0 1 2 14v-2a5 5 0 0 1 5-5z"/><path d="M8 9.5v3M6.5 11h3M16 10.5h.01M18 12.5h.01"/>',
     headset: '<path d="M3 14v-2a9 9 0 0 1 18 0v2M3 14h3v5H4a1 1 0 0 1-1-1zM21 14h-3v5h2a1 1 0 0 0 1-1zM18 19a4 4 0 0 1-4 3h-2"/>',
@@ -35,20 +50,23 @@
   function on(p) { return path === p ? ' class="on"' : ''; }
   var WA = 'https://wa.me/584245095002?text=Hola%20NEXORA';
 
-  var header = '<header class="topbar"><div class="wrap bar">' +
-    '<a class="lockup" href="/" aria-label="NEXORA, inicio">' + logo() + '<span class="wm">NEXORA</span></a>' +
+  var LOGOS = { general: '/img/logo-general.webp', navidad: '/img/logo-navidad.webp' };
+  var header = '<header class="topbar nxhead"><div class="wrap bar">' +
+    '<a class="brand" href="/" aria-label="NEXORA, recargas, juegos y entretenimiento"><img id="brandimg" class="brandimg" src="' + LOGOS[root.dataset.theme] + '" alt="NEXORA · Recargas · Juegos · Entretenimiento" width="400" height="116"></a>' +
     '<nav class="links" aria-label="Principal">' +
     '<a href="/"' + on('/') + '>' + ic('home') + 'Inicio</a>' +
     '<a href="/juegos"' + ((path === '/juegos' || path === '/juego' || path === '/pago') ? ' class="on"' : '') + '>' + ic('gamepad') + 'Juegos</a>' +
+    '<a href="/ofertas"' + on('/ofertas') + '>' + ic('tag') + 'Ofertas</a>' +
     '<a id="navord" href="/pedidos"' + on('/pedidos') + '>' + ic('list') + 'Pedidos</a>' +
     '<a id="navacct" href="/login"' + ((path === '/cuenta' || path === '/ajustes') ? ' class="on"' : '') + '>' + ic('user') + 'Mi cuenta</a></nav>' +
-    '<div class="actions"><a id="userbtn" class="circ" href="/login" aria-label="Iniciar sesión">' + ic('user') + '</a></div></div></header>';
+    '<div class="actions"><a id="bell" class="circ bell" href="/pedidos" aria-label="Mis pedidos en curso" hidden>' + ic('bell') + '<b class="cnt" hidden></b></a><a id="userbtn" class="circ" href="/login" aria-label="Iniciar sesión">' + ic('user') + '</a></div></div></header>';
 
   var tabs = '<nav class="tabbar" aria-label="Navegación móvil">' +
-    '<a href="/"' + on('/') + '>' + ic('home') + 'Inicio</a>' +
-    '<a href="/juegos"' + ((path === '/juegos' || path === '/juego' || path === '/pago') ? ' class="on"' : '') + '>' + ic('gamepad') + 'Juegos</a>' +
-    '<a id="tabord" href="/pedidos"' + on('/pedidos') + '>' + ic('list') + 'Pedidos</a>' +
-    '<a id="tabacct" href="/login" class="' + ((path === '/login' || path === '/registro' || path === '/cuenta' || path === '/ajustes') ? 'on' : '') + '">' + ic('user') + 'Cuenta</a></nav>';
+    '<a href="/"' + on('/') + '>' + ic('home') + '<span>Inicio</span></a>' +
+    '<a href="/juegos"' + ((path === '/juegos' || path === '/juego' || path === '/pago') ? ' class="on"' : '') + '>' + ic('gamepad') + '<span>Juegos</span></a>' +
+    '<a id="tabofe" href="/ofertas"' + on('/ofertas') + '>' + ic('tag') + '<span>Ofertas</span><i class="hot" hidden>HOT</i></a>' +
+    '<a id="tabord" href="/pedidos"' + on('/pedidos') + '>' + ic('list') + '<span>Pedidos</span></a>' +
+    '<a id="tabacct" href="/login" class="' + ((path === '/login' || path === '/registro' || path === '/cuenta' || path === '/ajustes') ? 'on' : '') + '">' + ic('user') + '<span>Cuenta</span></a></nav>';
 
   var footer = '<footer class="foot"><div class="wrap">' +
     '<div class="brandrow">' + logo() + '<span class="wm">NEXORA</span></div>' +
@@ -72,6 +90,21 @@
     document.body.insertAdjacentHTML('beforeend', footer + tabs);
   }
   window.NXI = { ic: ic, logo: logo, WA: WA };
+  // Tema vigente (verdad del servidor). Todos los visitantes ven el mismo; "?tema=" solo sirve para previsualizar.
+  var themeP = ADMIN ? Promise.resolve(null) : fetch('/api/theme').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  function fx() { if (root.dataset.theme !== 'navidad' || document.getElementById('nxfx')) return; var f = document.createElement('script'); f.id = 'nxfx'; f.src = '/js/fx.js'; f.defer = true; document.body.appendChild(f); }
+  window.NXTheme = themeP.then(function (t) {
+    var th = preview || (t && THEMES.indexOf(t.theme) > -1 ? t.theme : cached);
+    root.dataset.theme = th;
+    if (!preview) { try { localStorage.setItem('nx_theme', th); } catch (e) {} }
+    var im = document.getElementById('brandimg'); if (im) im.src = LOGOS[th];
+    if (preview && !ADMIN) {
+      var pv = document.createElement('div'); pv.className = 'tpreview'; pv.textContent = 'Vista previa · solo la ves tú';
+      var x = document.createElement('a'); x.href = location.pathname; x.textContent = 'Salir'; pv.append(x); document.body.append(pv);
+    }
+    fx();
+    return { theme: th, content: t && t.content ? t.content : null };
+  });
   window.NXApi = function (path, opts, token) {
     opts = opts || {};
     if (token) opts.headers = Object.assign({ authorization: 'Bearer ' + token }, opts.headers || {});
@@ -134,6 +167,10 @@
     // La cuenta SSECEO es solo de administración: nunca entra a la tienda.
     if (/@nexora\.invalid$/i.test(u.email || '') && !/^\/(ceo|login)$/.test(path)) { location.replace('/admin'); return; }
     needCountry(o);
+    if (o.sb) o.sb.from('orders').select('id', { count: 'exact', head: true }).in('status', ['awaiting_review', 'paid', 'delivering']).then(function (r) {
+      var bl = document.getElementById('bell'); if (!bl) return; bl.hidden = false;
+      var n = Number(r && r.count) || 0, c = bl.querySelector('.cnt'); if (n > 0) { c.textContent = n > 9 ? '9+' : String(n); c.hidden = false; }
+    }).catch(function () {});
     var name = (u.user_metadata && u.user_metadata.username) || (u.email || '').split('@')[0] || 'usuario';
     ['navacct', 'tabacct'].forEach(function (id) { var a = document.getElementById(id); if (a) a.setAttribute('href', '/cuenta'); });
     var btn = document.getElementById('userbtn');
