@@ -804,6 +804,7 @@
         todo.append(h('a', { href: '#' + x[0], class: 'rise' + (n ? ' hot' : ' zero') }, num('int', n, 'cnt'), h('span', { text: x[1] })));
       });
       if (todo.children.length) root.append(todo);
+      if (allowed.some(function (a) { return a.id === 'apariencia'; })) root.append(h('a', { href: '#apariencia', class: 'btn block rise', style: 'margin-top:12px;text-align:center', text: '🎨 Apariencia de la tienda (temas y Navidad)' }));
 
       var bento = h('div', { class: 'bento', style: 'margin-top:12px' });
       var daily = ov && ov.daily && ov.daily.length ? ov.daily : null;
