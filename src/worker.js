@@ -34,7 +34,9 @@ async function sb(env, path, { method = "GET", body, service = false, headers = 
     e.pg = { status: res.status, code: b.code || null, message: b.message || "" };
     throw e;
   }
-  return res.status === 204 ? null : res.json();
+  if (res.status === 204) return null;
+  const txt = await res.text();
+  return txt ? JSON.parse(txt) : null;
 }
 
 async function rpc(env, fn, args) {
