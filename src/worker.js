@@ -285,7 +285,7 @@ async function appearanceSave(env, ctx, body) {
     next.schedule = { enabled, theme: sc.theme || "navidad", start: re.test(start) ? start : "", end: re.test(end) ? end : "", tz };
   }
   if (body.content !== undefined) next.content = cleanContent(body.content);
-  try { await sb(env, "site_settings?on_conflict=key", { method: "POST", service: true, headers: { prefer: "resolution=merge-duplicates,return=minimal" }, body: { key: "appearance", value: next, updated_at: new Date().toISOString(), updated_by: ctx.user.id } }); } catch (e) { throw bad("Falta correr el SQL 0018 en Supabase (tabla site_settings). Córrelo y vuelve a intentar.", 409); }
+  try { await sb(env, "site_settings?on_conflict=key", { method: "POST", service: true, headers: { prefer: "resolution=merge-duplicates,return=minimal" }, body: { key: "appearance", value: next, updated_at: new Date().toISOString(), updated_by: ctx.user.id } }); } catch (e) { const c = e && e.pg ? e.pg.code : null, st = e && e.pg ? e.pg.status : 0; throw bad(c === "42P01" || c === "PGRST205" || st === 404 ? "Supabase no encuentra la tabla site_settings. Corre el SQL 0018 y luego: notify pgrst, 'reload schema';" : "No se pudo guardar (" + (c || st || "error") + (e && e.pg && e.pg.message ? ": " + String(e.pg.message).slice(0, 120) : "") + ").", 409); }
   await audit(env, ctx.user.id, "appearance.update", "site_settings", null, null, { theme: next.theme, scheduled: next.schedule.enabled });
   return json({ ...next, active: resolveTheme(next), now_local: localNow(next.schedule.tz) });
 }
