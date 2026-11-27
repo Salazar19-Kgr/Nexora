@@ -5,8 +5,9 @@
   var preview = THEMES.indexOf(qp) > -1 ? qp : null;
   var cached = 'general'; try { cached = localStorage.getItem('nx_theme') || 'general'; } catch (e) {}
   if (THEMES.indexOf(cached) < 0) cached = 'general';
-  root.dataset.theme = preview || cached;
-  if (!/^\/(admin|ceo)\/?$/.test(location.pathname)) {
+  var IS_ADM = /^\/admin\/?$/.test(location.pathname);
+  root.dataset.theme = IS_ADM ? 'general' : (preview || cached);
+  if (!IS_ADM) {
     var cl = document.createElement('link'); cl.rel = 'stylesheet'; cl.href = '/css/theme.css'; document.head.appendChild(cl);
   }
   var P = {
@@ -92,11 +93,11 @@
   window.NXI = { ic: ic, logo: logo, WA: WA };
   // Tema vigente (verdad del servidor). Todos los visitantes ven el mismo; "?tema=" solo sirve para previsualizar.
   var themeP = ADMIN ? Promise.resolve(null) : fetch('/api/theme').then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
-  function fx() { if (root.dataset.theme !== 'navidad' || document.getElementById('nxfx')) return; var f = document.createElement('script'); f.id = 'nxfx'; f.src = '/js/fx.js'; f.defer = true; document.body.appendChild(f); }
+  function fx() { if (IS_ADM || root.dataset.theme !== 'navidad' || document.getElementById('nxfx')) return; var f = document.createElement('script'); f.id = 'nxfx'; f.src = '/js/fx.js'; f.defer = true; document.body.appendChild(f); }
   window.NXTheme = themeP.then(function (t) {
     var th = preview || (t && THEMES.indexOf(t.theme) > -1 ? t.theme : cached);
-    root.dataset.theme = th;
-    if (!preview) { try { localStorage.setItem('nx_theme', th); } catch (e) {} }
+    root.dataset.theme = IS_ADM ? 'general' : th;
+    if (!preview && !IS_ADM) { try { localStorage.setItem('nx_theme', th); } catch (e) {} }
     var im = document.getElementById('brandimg'); if (im) im.src = LOGOS[th];
     if (preview && !ADMIN) {
       var pv = document.createElement('div'); pv.className = 'tpreview'; pv.textContent = 'Vista previa · solo la ves tú';
