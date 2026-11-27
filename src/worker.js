@@ -294,6 +294,7 @@ async function appearanceSave(env, ctx, body) {
 
 async function createOrder(env, request) {
   const user = await needUser(env, request);
+  limit(`order:${user.id}`, 15, 60000);
   const input = await readBody(request);
   if (!input.product_id || typeof input.player !== "object" || !input.player) throw bad("Datos incompletos.");
   const playerId = String(input.player.player_id || "").trim().slice(0, 64);
@@ -397,6 +398,8 @@ async function pushKey(env) { return json({ key: (await vapidKeys(env)).pub }); 
 async function pushSubscribe(env, ctx, body) {
   const ep = String((body && body.endpoint) || "");
   if (!/^https:\/\/[^\s]{10,600}$/.test(ep)) throw bad("Suscripción no válida.");
+  let host = ""; try { host = new URL(ep).hostname.toLowerCase(); } catch (e) {}
+  if (!/(^|\.)(googleapis\.com|push\.services\.mozilla\.com|notify\.windows\.com|push\.apple\.com)$/.test(host)) throw bad("Servicio de avisos no reconocido.");
   await sb(env, "push_subs?on_conflict=endpoint", { method: "POST", service: true, headers: { prefer: "resolution=merge-duplicates,return=minimal" }, body: { user_id: ctx.user.id, endpoint: ep } });
   return json({ ok: true });
 }
@@ -420,6 +423,7 @@ const tell = (ectx, env, text) => { const p = notifyAdmin(env, text); if (ectx &
 
 async function submitProof(env, request, id) {
   const user = await needUser(env, request);
+  limit(`proof:${user.id}`, 8, 60000);
   id = uuidOrFail(id);
   if (Number(request.headers.get("content-length") || 0) > 6 * 1024 * 1024) throw bad("La captura es demasiado pesada (máximo 5 MB).", 413);
   const form = await request.formData().catch(() => null);
@@ -481,6 +485,7 @@ async function me(env, request) {
 
 // El país se elige una sola vez (el cliente no puede cambiarlo después; lo cambia un administrador).
 async function setCountry(env, request) {
+  limit(`country:${clientIp(request)}`, 10, 60000);
   const user = await needUser(env, request);
   const b = await readBody(request);
   const country = asCountry(b.country);
@@ -492,6 +497,7 @@ async function setCountry(env, request) {
 
 async function redeem(env, request) {
   const user = await needUser(env, request);
+  limit(`redeem:${user.id}`, 8, 60000);
   const b = await readBody(request);
   const code = String(b.code || "").trim().slice(0, 32);
   if (!code) throw bad("Escribe un código.");
@@ -509,6 +515,7 @@ async function wheelInfo(env, request) {
 
 async function spin(env, request) {
   const user = await needUser(env, request);
+  limit(`spin:${user.id}`, 20, 60000);
   const prize = await rpc(env, "spin_wheel", { p_user: user.id });
   const p = await myProfile(env, user.id);
   return json({ prize, spins: p.spins, balance_usd: p.balance_usd, points: p.points, coins: p.coins });
@@ -550,7 +557,8 @@ async function login(env, request) {
   return json({ access_token: s.access_token, refresh_token: s.refresh_token });
 }
 
-async function usernameAvailable(env, url) {
+async function usernameAvailable(env, url, request) {
+  if (request) limit(`uname:${clientIp(request)}`, 30, 60000);
   const u = (url.searchParams.get("u") || "").trim();
   if (!/^[A-Za-z0-9_]{3,20}$/.test(u)) return json({ available: false });
   const rows = await sb(env, `profiles?username=eq.${encodeURIComponent(u)}&select=id`, { service: true });
@@ -1160,6 +1168,7 @@ async function auditList(env, ctx) {
 
 async function admin(env, request, url) {
   const ctx = await staff(env, request, /^\/api\/admin\/me\/?$/.test(url.pathname));
+  limit(`adm:${ctx.user.id}`, 400, 60000);
   const seg = url.pathname.replace(/^\/api\/admin\/?/, "").split("/").filter(Boolean);
   const m = request.method;
   const [a, b, c] = seg;
@@ -1221,6 +1230,7 @@ async function ceoStatus(env) {
 }
 
 async function ceoRegister(env, request) {
+  limit(`ceoreg:${clientIp(request)}`, 5, 600000);
   if (!setupEnabled(env)) throw bad("Falta crear el secreto CEO_SETUP_KEY (mínimo 16 caracteres) en Cloudflare.", 503);
   const b = await readBody(request);
   if (!(await sameSecret(String(b.setup_key || ""), String(env.CEO_SETUP_KEY)))) throw bad("Clave de instalación incorrecta.", 403);
@@ -1249,6 +1259,7 @@ async function ceoRegister(env, request) {
 }
 
 async function ceoLogin(env, request) {
+  limit(`ceologin:${clientIp(request)}`, 10, 60000);
   const b = await request.json().catch(() => null);
   const username = String((b && b.username) || "").trim().slice(0, 30);
   const password = String((b && b.password) || "").slice(0, 72);
@@ -1538,7 +1549,7 @@ export default {
       if (p === "/api/ceo/status" && m === "GET") return await ceoStatus(env);
       if (p === "/api/ceo/register" && m === "POST") return await ceoRegister(env, request);
       if (p === "/api/ceo/login" && m === "POST") return await ceoLogin(env, request);
-      if (p === "/api/username" && m === "GET") return await usernameAvailable(env, url);
+      if (p === "/api/username" && m === "GET") return await usernameAvailable(env, url, request);
       if (p === "/api/me" && m === "GET") return await me(env, request);
       if (p === "/api/country" && m === "POST") return await setCountry(env, request);
       if (p === "/api/redeem" && m === "POST") return await redeem(env, request);
