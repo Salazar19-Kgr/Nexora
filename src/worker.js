@@ -527,6 +527,7 @@ const captchaMeta = (t) => { const v = String(t || "").slice(0, 2100); return v 
 
 async function login(env, request) {
   limit(`login:${clientIp(request)}`, 12, 60000);
+  if (!(await dbHit(env, `login:${clientIp(request)}`, 20, 60))) throw bad("Demasiados intentos. Espera un momento e inténtalo de nuevo.", 429);
   const input = await request.json().catch(() => null);
   const ident = String((input && input.identifier) || "").trim().slice(0, 120);
   const password = String((input && input.password) || "").slice(0, 200);
@@ -1231,6 +1232,7 @@ async function ceoStatus(env) {
 
 async function ceoRegister(env, request) {
   limit(`ceoreg:${clientIp(request)}`, 5, 600000);
+  if (!(await dbHit(env, `ceoreg:${clientIp(request)}`, 8, 3600))) throw bad("Demasiados intentos. Espera un momento e inténtalo de nuevo.", 429);
   if (!setupEnabled(env)) throw bad("Falta crear el secreto CEO_SETUP_KEY (mínimo 16 caracteres) en Cloudflare.", 503);
   const b = await readBody(request);
   if (!(await sameSecret(String(b.setup_key || ""), String(env.CEO_SETUP_KEY)))) throw bad("Clave de instalación incorrecta.", 403);
@@ -1263,6 +1265,8 @@ async function ceoLogin(env, request) {
   const b = await request.json().catch(() => null);
   const username = String((b && b.username) || "").trim().slice(0, 30);
   const password = String((b && b.password) || "").slice(0, 72);
+  const ipKey = `ceo:${clientIp(request)}`;
+  if (!(await dbHit(env, ipKey, 4, 900, false))) return json({ error: "Demasiados intentos desde esta conexión. Espera 15 minutos." }, 429);
   const row = await ceoRow(env);
   if (!row || !row.email) return json({ error: "Aún no hay un acceso SSECEO creado." }, 404);
   if (row.locked_until && new Date(row.locked_until) > new Date()) {
@@ -1270,7 +1274,9 @@ async function ceoLogin(env, request) {
     return json({ error: `Acceso bloqueado por seguridad. Intenta de nuevo en ${mins} min.` }, 429);
   }
   const fail = async () => {
-    await rpc(env, "ceo_fail", {}).catch(() => {});
+    await dbHit(env, ipKey, 5, 900, true);
+    // El bloqueo general solo se activa si muchas conexiones distintas fallan a la vez (ataque en grupo).
+    if (!(await dbHit(env, "ceo:all", 40, 3600, true))) await rpc(env, "ceo_fail", {}).catch(() => {});
     return json({ error: "Usuario o contraseña incorrectos." }, 401);
   };
   if (!username || !password) return json({ error: "Completa usuario y contraseña." }, 400);
@@ -1281,6 +1287,7 @@ async function ceoLogin(env, request) {
   if (!res.ok) return fail();
   const s = await res.json();
   await rpc(env, "ceo_ok", {}).catch(() => {});
+  await sb(env, `rate_limits?key=eq.${encodeURIComponent(ipKey)}`, { method: "DELETE", service: true }).catch(() => {});
   await audit(env, row.user_id, "ceo.login", "ceo_access", "1", null, null);
   return json({ access_token: s.access_token, refresh_token: s.refresh_token });
 }
@@ -1512,6 +1519,10 @@ function limit(key, max, windowMs) {
   const h = hits.get(key);
   if (!h || h.t < now) { hits.set(key, { n: 1, t: now + windowMs }); return; }
   if (++h.n > max) throw bad("Demasiados intentos. Espera un momento e inténtalo de nuevo.", 429);
+}
+// Límite compartido entre todos los servidores (guardado en la base). Si la migración 0019 no está, no bloquea a nadie.
+async function dbHit(env, key, max, secs, inc = true) {
+  try { return (await rpc(env, "rate_hit", { p_key: key, p_max: max, p_secs: secs, p_inc: inc })) !== false; } catch (e) { return true; }
 }
 const kick = (ectx, env) => { const p = processFulfillments(env).catch(() => {}); if (ectx && ectx.waitUntil) ectx.waitUntil(p); };
 const clientIp = (request) => request.headers.get("cf-connecting-ip") || "x";
