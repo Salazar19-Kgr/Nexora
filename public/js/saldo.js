@@ -24,16 +24,22 @@
   var msg = $('#tmsg');
   function say(t, ok) { msg.textContent = t || ''; msg.className = 'msg' + (ok ? ' ok' : ''); }
 
-  var AMOUNTS = [5, 10, 20, 50], chips = $('#tamts'), mlist = $('#tmeth'), pay = $('#tpay');
+  var AMOUNTS = [5, 10, 20, 50, 100, 250], chips = $('#tamts'), mlist = $('#tmeth'), pay = $('#tpay');
   AMOUNTS.forEach(function (a) {
     var b = el('button', 'chip', '$' + a); b.type = 'button';
-    b.addEventListener('click', function () { amount = a; Array.prototype.forEach.call(chips.children, function (x) { x.classList.toggle('on', x === b); }); refresh(); });
+    b.addEventListener('click', function () { amount = a; var cu = $('#tcustom'); if (cu) cu.value = ''; Array.prototype.forEach.call(chips.children, function (x) { x.classList.toggle('on', x === b); }); refresh(); });
     chips.append(b);
+  });
+  var custom = $('#tcustom');
+  if (custom) custom.addEventListener('input', function () {
+    var v = Math.round(parseFloat(custom.value) * 100) / 100;
+    Array.prototype.forEach.call(chips.children, function (x) { x.classList.remove('on'); });
+    amount = isFinite(v) && v >= 1 ? v : 0; refresh();
   });
 
   function drawMethods() {
     mlist.replaceChildren();
-    if (!methods.length) { mlist.append(el('p', 'muted', 'Aún no hay métodos de pago disponibles en tu país.')); return; }
+    if (!methods.length) { mlist.append(el('p', 'muted', 'Aún no hay métodos para recargar en tu país. Vuelve pronto.')); return; }
     methods.forEach(function (m) {
       var b = el('button', 'prow mrow'); b.type = 'button';
       var ic = el('span', 'mico'); ic.append(NXArt.methodIcon(m.kind));

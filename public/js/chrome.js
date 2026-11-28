@@ -128,7 +128,7 @@
     })()
   };
 
-  var COUNTRIES = [['VE', 'Venezuela'], ['DO', 'República Dominicana'], ['PA', 'Panamá'], ['MX', 'México'], ['US', 'Estados Unidos']];
+  var COUNTRIES = window.NXCountries || [['VE', 'Venezuela'], ['DO', 'República Dominicana']];
   window.NXCountries = COUNTRIES;
 
   // Quien no tiene país (cuentas viejas o con Google/Discord/Facebook) debe elegirlo antes de seguir.

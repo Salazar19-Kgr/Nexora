@@ -14,9 +14,13 @@
     method: { pago_movil: 'Pago móvil', transferencia: 'Transferencia', zelle: 'Zelle', binance: 'Binance Pay', usdt: 'USDT', efectivo: 'Efectivo', otro: 'Otro' },
     prize: { none: 'Sin premio', balance: 'Saldo', points: 'Puntos', spins: 'Giros', coins: 'NexoCoins' }
   };
-  var CTRY = { VE: 'Venezuela', DO: 'República Dominicana', PA: 'Panamá', MX: 'México', US: 'Estados Unidos' };
-  var CTRY_KEYS = ['VE', 'DO', 'PA', 'MX', 'US'];
-  var CTRY_CUR = { VE: 'VES', DO: 'DOP', PA: 'USD', MX: 'MXN', US: 'USD' };
+  // Zonas de venta: VE y DO compran directo con métodos de su país; "GL" = resto del mundo (solo con saldo, Binance).
+  var CTRY = { VE: 'Venezuela', DO: 'República Dominicana', GL: 'Resto del mundo (con saldo)' };
+  var CTRY_KEYS = ['VE', 'DO', 'GL'];
+  var CTRY_CUR = { VE: 'VES', DO: 'DOP', GL: 'USD' };
+  // Nombre real de cualquier país (para ver el país de cada cliente).
+  var ALLC = {}; (window.NXCountries || []).forEach(function (c) { ALLC[c[0]] = c[1]; });
+  function cname(c) { return CTRY[c] && c !== 'GL' ? CTRY[c] : (ALLC[c] || c || ''); }
   var CUR_NAME = { VES: 'Bolívares (Bs)', DOP: 'Pesos dominicanos (RD$)', MXN: 'Pesos mexicanos (MX$)', USD: 'Dólares (USD)', USDT: 'USDT' };
   var CTRY_OPTS = CTRY_KEYS.map(function (k) { return [k, CTRY[k]]; });
   var NEXT = {
@@ -252,7 +256,7 @@
     },
     paymethods: {
       name: 'paymethods', title: 'Métodos de pago', desc: 'Lo que ve el cliente al pagar: datos de tu cuenta y moneda.', newTitle: 'Agregar método', editTitle: 'Editar método', empty: 'Aún no hay métodos. Agrega el primero con “+ Nuevo”.',
-      note: 'Cada país tiene sus propios métodos: el cliente solo ve los de su país.',
+      note: 'Venezuela y República Dominicana: métodos de su país (pago directo y recarga de saldo). “Resto del mundo”: aquí pones Binance (y luego PayPal) para que recarguen saldo.',
       toolbar: function (ex, state, redraw) {
         var box = h('div', { class: 'ctab', role: 'group', 'aria-label': 'Filtrar por país' });
         [['', 'Todos']].concat(CTRY_OPTS).forEach(function (o) {
@@ -931,7 +935,7 @@
             h('div', { class: 'ainfo' },
               h('b', { text: (u.username || u.display_name || '(sin nombre)') + ' · ' + (ES.role[u.role] || u.role) }),
               h('small', { text: (u.email || 'sin correo') + ' · alta ' + when(u.created_at) }),
-              chips([u.country ? CTRY[u.country] : 'Sin país', 'Saldo ' + usd(u.balance_usd), (u.coins || 0) + ' NexoCoins', u.points + ' puntos', u.spins + ' giros'])),
+              chips([u.country ? cname(u.country) : 'Sin país', 'Saldo ' + usd(u.balance_usd), (u.coins || 0) + ' NexoCoins', u.points + ' puntos', u.spins + ' giros'])),
             h('div', { class: 'aact' }, u.banned ? badge(['Suspendido', 'bad']) : null,
               h('button', { class: 'btn ghost sm', text: 'Gestionar', onclick: function () { manageUser(u, load); } }))));
         });
@@ -960,7 +964,7 @@
           h('button', { type: 'button', class: 'btn sm', text: 'Aplicar ajuste', onclick: function () {
             run({ action: 'adjust', kind: kind.value, amount: Number(amt.value) }, function (r) { u.balance_usd = r.balance_usd; u.points = r.points; u.spins = r.spins; u.coins = r.coins; amt.value = ''; });
           } }));
-        var cs = h('select', null, [['', 'Sin país']].concat(CTRY_OPTS).map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
+        var cs = h('select', null, [['', 'Sin país']].concat((window.NXCountries || []).map(function (c) { return [c[0], c[1]]; })).map(function (o) { return h('option', { value: o[0], text: o[1] }); }));
         cs.value = u.country || '';
         dlg.append(h('label', null, 'País del cliente', cs),
           h('button', { type: 'button', class: 'btn ghost sm', text: 'Guardar país', onclick: function () {

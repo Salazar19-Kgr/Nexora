@@ -1,5 +1,7 @@
 (function () {
   var $ = function (s) { return document.querySelector(s); };
+
+  (function () { var sel = document.getElementById('country'); if (!sel || sel.options.length > 1) return; (window.NXCountries || []).forEach(function (c) { var o = document.createElement('option'); o.value = c[0]; o.textContent = c[1]; sel.append(o); }); })();
   var mode = document.body.dataset.mode;
   var msg = $('#msg'), go = $('#go');
   if (window.NXCaptcha) NXCaptcha.init('#cap');
@@ -78,7 +80,7 @@
   function signup(sb) {
     var user = $('#user').value.trim(), email = $('#email').value.trim(), pw = $('#pw').value, pw2 = $('#pw2').value, country = $('#country').value;
     if (!/^[A-Za-z0-9_]{3,20}$/.test(user)) { say('Usuario: 3 a 20 letras, números o guion bajo.'); return busy(false); }
-    if (!/^(VE|DO|PA|MX|US)$/.test(country)) { say('Elige tu país. Es obligatorio.'); return busy(false); }
+    if (!(window.NXCountries || []).some(function (c) { return c[0] === country; })) { say('Elige tu país. Es obligatorio.'); return busy(false); }
     if (!/^\S+@\S+\.\S+$/.test(email)) { say('Escribe un correo válido.'); return busy(false); }
     if (pw.length < 8) { say('La contraseña debe tener al menos 8 caracteres.'); return busy(false); }
     if (pw !== pw2) { say('Las contraseñas no coinciden.'); return busy(false); }

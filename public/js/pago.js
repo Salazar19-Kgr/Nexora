@@ -70,6 +70,7 @@
       var pr = order.proof;
       if (pr && pr.status === 'rejected') say('Tu comprobante anterior fue rechazado' + (pr.reject_reason ? ': ' + pr.reject_reason : '.') + ' Envía uno nuevo.');
       else if (first) say('');
+      if (order.country === 'GL') { balPay(true); return; }
       if (first || !methods.length) loadMethods(); else drawMethods();
       return;
     }
@@ -88,12 +89,18 @@
     NXApi('/api/payment-methods', null, token).then(function (m) { methods = m; drawMethods(); balPay(); })
       .catch(function (e) { say(e.message); });
   }
-  function balPay() {
+  function balPay(only) {
     var bx = $('#balpay'); if (!bx) return;
+    if (only) { show('#s-methods', true); var ml = $('#mlist'); if (ml) ml.hidden = true; var hh = document.querySelector('#s-methods h2'); if (hh) hh.textContent = 'Paga con tu saldo'; }
     NXApi('/api/me', null, token).then(function (me) {
       var bal = Number(me.balance_usd || 0), due = Number(order.amount_usd);
       bx.replaceChildren();
-      if (!(bal >= due && due > 0)) { bx.hidden = true; return; }
+      if (!(bal >= due && due > 0)) {
+        if (!only) { bx.hidden = true; return; }
+        var need = document.createElement('p'); need.className = 'muted';
+        need.textContent = 'Tu saldo es ' + usd(bal) + ' y este pedido cuesta ' + usd(due) + '. Te faltan ' + usd(Math.max(due - bal, 0)) + '. Recarga tu saldo (con Binance) y vuelve aquí: tu pedido te espera.';
+        bx.append(need, link('/cuenta#saldo', 'Recargar saldo')); bx.hidden = false; return;
+      }
       var b = document.createElement('button'); b.type = 'button'; b.className = 'btn block'; b.textContent = 'Pagar con saldo (' + usd(bal) + ' disponible)';
       b.addEventListener('click', function () {
         if (!confirm('Se descontarán ' + usd(due) + ' de tu saldo.')) return;

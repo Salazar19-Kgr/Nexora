@@ -54,13 +54,15 @@ async function rpc(env, fn, args) {
   return b;
 }
 
-// Países habilitados y su moneda local (USD = sin conversión).
-const COUNTRIES = ["VE", "DO", "PA", "MX", "US"];
-const COUNTRY_NAME = { VE: "Venezuela", DO: "República Dominicana", PA: "Panamá", MX: "México", US: "Estados Unidos" };
-const LOCAL_CUR = { VE: "VES", DO: "DOP", PA: "USD", MX: "MXN", US: "USD" };
+// Países habilitados. VE y DO compran directo con métodos de su país; el resto ("GL") solo con saldo (Binance).
+const COUNTRIES = "VE DO AL DE AD AO AI AG SA AR AM AW AU AT AZ BS BB BH BE BZ BJ BM BY BA BW BR BN BG BF BI BT CV KH CM BQ QA TD CZ CL CY VA CO KM CG KR CR CI HR CW DK DM EC SV AE ER SK SI ES US EE SZ ET PH FI FJ FR GA GM GE GH GI GD GR GL GP GU GT GF GG GN GQ GW GY HT HN HU IN ID IE IM CX NF IS AX KY CC CK FO FK MP MH PN SB TC VG VI IL IT JM JP JE JO KZ KE KG KI LA LS LV LB LR LY LI LT LU MK MG MY MW MV ML MT MQ MU MR YT MX FM MD MC MN ME MS MZ MM NA NR NI NE NG NU NO NC NZ OM PK PW PA PG PY PE PF PL PT PR HK MO GB CF CD RE RW RO RU EH WS AS BL KN SM MF PM VC SH LC ST SN RS SC SL SX SO LK ZA SD SS SE CH SR SJ TH TW TZ TJ IO PS TL TG TK TO TT TM TR TV UA UG UY UZ VU VN WF YE DJ ZM ZW".split(" ");
+const ZONES = ["VE", "DO", "GL"];
+const zoneOf = (c) => (c === "VE" || c === "DO" ? c : "GL");
+const LOCAL_CUR = { VE: "VES", DO: "DOP", GL: "USD" };
 const CURRENCIES = ["USD", "VES", "USDT", "DOP", "MXN"];
 const RATE_CUR = ["VES", "DOP", "MXN"];
 const asCountry = (v) => { const c = String(v || "").toUpperCase(); return COUNTRIES.includes(c) ? c : null; };
+const asZone = (v) => { const c = String(v || "").toUpperCase(); return ZONES.includes(c) ? c : null; };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const uuidOrFail = (v) => { if (!UUID.test(String(v))) throw bad("Identificador no válido."); return String(v).toLowerCase(); };
@@ -84,7 +86,7 @@ const PG_MSG = {
   referencia_usada: [409, "Esa referencia ya fue usada en otro pago."],
   comprobante_no_pendiente: [409, "Ese comprobante ya fue revisado."],
   accion_invalida: [400, "Acción no válida."],
-  monto_invalido: [400, "Elige una recarga de 5, 10, 20 o 50 dólares."],
+  monto_invalido: [400, "El mínimo de recarga es 1 dólar."],
   metodo_no_disponible: [404, "Ese método de pago no está disponible."],
   demasiadas_recargas: [429, "Ya tienes 3 recargas en revisión. Espera a que las aprobemos."],
   referencia_repetida: [409, "Esa referencia ya fue usada en otra recarga."],
@@ -168,16 +170,17 @@ async function gamePage(env, request, url, slug) {
   if (!g.length) throw bad("Juego no encontrado.", 404);
   const { country, locked } = await countryOf(env, request, url);
   if (!country) return json({ game: g[0], products: [], rate: null, country: null, locked, currency: null });
-  const currency = LOCAL_CUR[country];
+  const zone = zoneOf(country);
+  const currency = LOCAL_CUR[zone];
   const [rows, rate] = await Promise.all([
     sb(env, `products?game_id=eq.${g[0].id}&status=eq.active&select=id,name,price_usd,product_prices(country,price_usd)`, { service: true }),
     latestRate(env, currency),
   ]);
   const products = rows
-    .map((p) => ({ id: p.id, name: p.name, price_usd: ((p.product_prices || []).find((x) => x.country === country) || {}).price_usd }))
+    .map((p) => ({ id: p.id, name: p.name, price_usd: ((p.product_prices || []).find((x) => x.country === zone) || {}).price_usd }))
     .filter((p) => p.price_usd != null)
     .sort((a, b) => Number(a.price_usd) - Number(b.price_usd));
-  return json({ game: g[0], products, rate, country, locked, currency });
+  return json({ game: g[0], products, rate, country, zone, direct: zone !== "GL", locked, currency });
 }
 
 
@@ -322,7 +325,7 @@ async function paymentMethods(env, request) {
   const p = await sb(env, `profiles?id=eq.${user.id}&select=country`, { service: true });
   const country = p[0] && p[0].country;
   if (!country) throw bad("Elige tu país para continuar.", 409);
-  return json(await sb(env, `payment_methods?active=eq.true&country=eq.${country}&select=id,name,kind,currency,instructions,min_usd&order=sort_order.asc,name.asc`, { service: true }));
+  return json(await sb(env, `payment_methods?active=eq.true&country=eq.${zoneOf(country)}&select=id,name,kind,currency,instructions,min_usd&order=sort_order.asc,name.asc`, { service: true }));
 }
 
 async function myOrder(env, request, id) {
@@ -428,6 +431,9 @@ async function submitProof(env, request, id) {
   if (Number(request.headers.get("content-length") || 0) > 6 * 1024 * 1024) throw bad("La captura es demasiado pesada (máximo 5 MB).", 413);
   const form = await request.formData().catch(() => null);
   if (!form) throw bad("Datos inválidos.");
+  const own = await sb(env, `orders?id=eq.${id}&user_id=eq.${user.id}&select=country`, { service: true });
+  if (!own.length) throw bad("Pedido no encontrado.", 404);
+  if (own[0].country === "GL") throw bad("En tu país los pedidos se pagan con saldo. Recarga tu saldo y paga desde ahí.", 409);
   const methodId = uuidOrFail(form.get("method_id"));
   const reference = coerce({ t: "text", label: "Referencia", req: true, upper: true, max: 64, re: /^[A-Z0-9._-]{4,64}$/ }, String(form.get("reference") || "").replace(/\s+/g, ""));
   const file = form.get("proof");
@@ -715,7 +721,7 @@ const RES = {
     spec: {
       name: { t: "text", label: "Nombre", req: true, max: 60 },
       kind: { t: "enum", label: "Tipo", list: KINDS, req: true },
-      country: { t: "enum", label: "País", list: COUNTRIES, req: true },
+      country: { t: "enum", label: "País", list: ZONES, req: true },
       currency: { t: "enum", label: "Moneda", list: CURRENCIES, req: true },
       instructions: { t: "text", label: "Datos para pagar", req: true, max: 800 },
       min_usd: { t: "num", label: "Mínimo en USD", min: 0, max: 100000, def: 0 },
@@ -780,8 +786,8 @@ async function pricesList(env, ctx) {
 async function priceSet(env, ctx, body) {
   need(ctx, "catalog.write");
   const product = uuidOrFail(body.product_id);
-  const country = asCountry(body.country);
-  if (!country) throw bad("País no válido.");
+  const country = asZone(body.country);
+  if (!country) throw bad("Zona no válida (VE, DO o GL).");
   const prod = await sb(env, `products?id=eq.${product}&select=id`, { service: true });
   if (!prod.length) throw bad("Paquete no encontrado.", 404);
   const empty = body.price_usd === null || body.price_usd === undefined || String(body.price_usd).trim() === "";
@@ -985,12 +991,19 @@ async function refundDecide(env, ctx, id, action) {
 }
 
 // ---------- Saldo: recargas de 5/10/20/50 $ (las aprueba el equipo) y pago de pedidos con saldo ----------
+// Recarga de saldo: cualquier monto desde $1 (sin tope práctico; 10 millones solo evita errores de dedo).
+function topupAmountOk(v) {
+  const n = Math.round(Number(v) * 100) / 100;
+  if (!Number.isFinite(n) || n < 1) throw bad("El mínimo de recarga es 1 dólar.");
+  if (n > 10000000) throw bad("Ese monto no es válido.");
+  return n;
+}
+
 async function topupCreate(env, request) {
   const user = await needUser(env, request);
   limit(`topup:${user.id}`, 6, 60000);
   const b = await readBody(request);
-  const amount = Number(b.amount);
-  if (![5, 10, 20, 50].includes(amount)) throw bad("Elige una recarga de 5, 10, 20 o 50 dólares.");
+  const amount = topupAmountOk(b.amount);
   const reference = coerce({ t: "text", label: "Referencia", req: true, upper: true, max: 64, re: /^[A-Z0-9._-]{4,64}$/ }, b.reference);
   const r = await rpc(env, "topup_create", { p_user: user.id, p_amount: amount, p_method: uuidOrFail(b.method_id), p_ref: reference });
   return json(r, 201);
@@ -1005,9 +1018,8 @@ async function topupsMine(env, request) {
 async function topupAmount(env, request, url) {
   // Cuánto debe enviar el cliente en la moneda del método (VES/DOP/MXN se convierten con la tasa vigente).
   const user = await needUser(env, request);
-  const amount = Number(url.searchParams.get("amount"));
+  const amount = topupAmountOk(url.searchParams.get("amount"));
   const cur = String(url.searchParams.get("currency") || "USD");
-  if (![5, 10, 20, 50].includes(amount)) throw bad("Monto no válido.");
   const rate = RATE_CUR.includes(cur) ? await latestRate(env, cur) : 1;
   if (!rate) throw bad("Aún no hay tasa para esa moneda.", 409);
   return json({ amount_usd: amount, currency: cur, pay: money(amount * rate) });

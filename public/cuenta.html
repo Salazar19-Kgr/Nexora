@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#050907">
 <title>Mi cuenta · NEXORA</title>
 <link rel="icon" href="/img/nexora-emblem.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/css/nexora.css?v=37">
+<link rel="stylesheet" href="/css/nexora.css?v=39">
 </head>
 <body>
 <main class="wrap acct">
@@ -41,8 +41,9 @@
       </div>
       <h2 id="stitle">Recargar saldo</h2>
     <div id="topup">
-      <p class="muted">Elige 5, 10, 20 o 50 dólares. Lo aprobamos a mano y luego pagas tus pedidos con un toque.</p>
+      <p class="muted">Elige cuánto quieres recargar, sin límite (mínimo 1 dólar). Lo aprobamos a mano y luego pagas tus pedidos con un toque.</p>
       <div class="fchips" id="tamts" role="group" aria-label="Monto"></div>
+      <input id="tcustom" type="number" inputmode="decimal" min="1" step="0.01" placeholder="Otro monto en $ (mínimo 1)" aria-label="Otro monto en dólares" style="width:100%;margin:8px 0;padding:12px 14px;border-radius:14px;border:1px solid rgba(92,255,122,.35);background:rgba(0,0,0,.35);color:inherit;font:inherit">
       <div class="plist" id="tmeth" role="group" aria-label="Método de pago"></div>
       <form id="tform" novalidate>
         <div id="tpay" hidden>
@@ -87,10 +88,11 @@
   </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="/js/chrome.js?v=37"></script>
-<script src="/js/art.js?v=37"></script>
-<script src="/js/account.js?v=37"></script>
-<script src="/js/rewards.js?v=37"></script>
-<script src="/js/saldo.js?v=37"></script>
+<script src="/js/countries.js?v=39"></script>
+<script src="/js/chrome.js?v=39"></script>
+<script src="/js/art.js?v=39"></script>
+<script src="/js/account.js?v=39"></script>
+<script src="/js/rewards.js?v=39"></script>
+<script src="/js/saldo.js?v=39"></script>
 </body>
 </html>
